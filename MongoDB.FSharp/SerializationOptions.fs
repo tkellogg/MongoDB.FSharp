@@ -14,6 +14,7 @@ module SerializationOptions =
   type ListSerializationOptions(itemOptions : IBsonSerializationOptions) =
       inherit BsonBaseSerializationOptions()
       let mutable itemSerializatonOptions = itemOptions
+      new() = ListSerializationOptions(null)
 
       member val ItemSerializationOptions = itemSerializatonOptions
 
@@ -43,3 +44,7 @@ module SerializationOptions =
 
           itemSerializatonOptions <- ensureSerializationOptions()
           itemSerializatonOptions.ApplyAttribute(itemSerializer, attribute)
+
+        override this.Clone() = 
+            ListSerializationOptions(itemSerializatonOptions) :> IBsonSerializationOptions
+

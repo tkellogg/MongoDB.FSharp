@@ -40,12 +40,14 @@ type ``When serializing lists``() =
         
     [<Fact>]
     member this.``It can deserialze lists``() =
-        let collection = db.GetCollection<ObjectWithList> "objects"
-        let obj = ObjectWithList()
-        obj.List <- [ "hello"; "world" ]
-        collection.Save obj |> ignore
+        let list = BsonArray([ "hello"; "world" ])
+        let id = BsonObjectId.GenerateNewId()
+        let document = BsonDocument([ BsonElement("_id", id); BsonElement("List", list) ])
+        let collection = db.GetCollection "objects"
+        collection.Save document |> ignore
 
-        let fromDb = collection.FindOne(new QueryDocument("_id", obj.Id))
+        let collection = db.GetCollection<ObjectWithList> "objects"
+        let fromDb = collection.FindOne(new QueryDocument("_id", id))
         let array = fromDb.List
         Assert.Equal(2, array.Length)
 
