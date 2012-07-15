@@ -1,4 +1,4 @@
-﻿namespace MongoDB.FSharp.Tests
+﻿namespace ``Acceptance Tests``
 
 open Xunit
 open Swensen.Unquote

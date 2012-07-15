@@ -24,7 +24,7 @@ module Serializers =
             this.WriteEndArray()
 
     type ListSerializer<'T>() =
-        inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer()
+        inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer(ListSerializationOptions())
 
         override this.Serialize(writer : BsonWriter, nominalType : Type, value : Object, options : IBsonSerializationOptions) =
             if value = null then
@@ -46,19 +46,36 @@ module Serializers =
         override this.Deserialize(reader : BsonReader, nominalType : Type, actualType : Type, options : IBsonSerializationOptions) =
             let serializationOptions = this.EnsureSerializationOptions<ListSerializationOptions>(options)
             let itemOptions = serializationOptions.ItemSerializationOptions
-            let readItems() =
+            let readArray() =
                 seq {
-                    reader.ReadStartDocument()
+                    reader.ReadStartArray()
                     let convention = BsonSerializer.LookupDiscriminatorConvention(typeof<'T>)
                     while reader.ReadBsonType() <> BsonType.EndOfDocument do
-                        let actualElementType = convention.GetActualType(reader, nominalType)
+                        let actualElementType = convention.GetActualType(reader, typeof<'T>)
                         let serializer = BsonSerializer.LookupSerializer(actualElementType)
-                        let element = serializer.Deserialize(reader, nominalType, itemOptions)
+                        let element = serializer.Deserialize(reader, typeof<'T>, itemOptions)
                         yield element :?> 'T
                     reader.ReadEndArray()
                 }
+
+            let readArrayFromObject () =
+                reader.ReadStartDocument()
+                reader.ReadString("_t") |> ignore
+                reader.ReadName("_v")
+                let value = this.Deserialize(reader, actualType, actualType, options)
+                reader.ReadEndDocument()
+                value
             
-            readItems() |> List.ofSeq :> Object
+            let bsonType = reader.GetCurrentBsonType()
+            match bsonType with
+            | BsonType.Null ->
+                reader.ReadNull()
+                null
+            | BsonType.Array -> readArray() |> List.ofSeq :> Object
+            | BsonType.Document -> readArrayFromObject ()
+            | _ -> 
+                let msg = sprintf "Can't deserialize a %s from BsonType %s" actualType.FullName (bsonType.ToString())
+                raise(InvalidOperationException(msg))
 
         interface IBsonArraySerializer with
             member this.GetItemSerializationInfo() : BsonSerializationInfo =
@@ -67,7 +84,8 @@ module Serializers =
                 let serializer = BsonSerializer.LookupSerializer nominalType
                 BsonSerializationInfo(elementName, serializer, nominalType, null)
 
-    let ensureClassMapRegistered actualType =
+
+    let getClassMap isClassMapRegistered (actualType : Type) =
         let rec getMember (_type : Type) name other =
             let memberInfos = _type.GetMember name
             if not (memberInfos |> Seq.isEmpty) then
@@ -77,7 +95,7 @@ module Serializers =
             else
                 None
 
-        if not (BsonClassMap.IsClassMapRegistered actualType) then
+        if not (isClassMapRegistered actualType) then
             let genericType = typedefof<BsonClassMap<_>>.MakeGenericType(actualType)
             let classMap = Activator.CreateInstance(genericType) :?> BsonClassMap
 
@@ -87,7 +105,15 @@ module Serializers =
             | Some memberInfo -> classMap.MapIdMember memberInfo |> ignore
             | None -> ()
 
-            classMap.Freeze() |> BsonClassMap.RegisterClassMap
+            classMap.Freeze() |> Some
+        else 
+            None
+
+    let ensureClassMapRegistered actualType =
+        let fn = BsonClassMap.IsClassMapRegistered 
+        match getClassMap fn actualType with
+        | Some map -> map |> BsonClassMap.RegisterClassMap
+        | None -> ()
 
     type RecordSerializer() =
         inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer()
