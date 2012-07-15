@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MongoDB.FSharp", "MongoDB.FSharp\MongoDB.FSharp.fsproj", "{7CBEB93A-1590-42DB-9E40-61630E79304A}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MongoDB.FSharp.Tests", "MongoDB.FSharp.Tests\MongoDB.FSharp.Tests.fsproj", "{DE725DAC-C637-4DA7-A30D-69061D33D1B2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{1207C2F4-D695-48D4-A0D1-9258EC678E22}"
+	ProjectSection(SolutionItems) = preProject
+		.nuget\packages.config = .nuget\packages.config
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7CBEB93A-1590-42DB-9E40-61630E79304A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7CBEB93A-1590-42DB-9E40-61630E79304A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7CBEB93A-1590-42DB-9E40-61630E79304A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7CBEB93A-1590-42DB-9E40-61630E79304A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE725DAC-C637-4DA7-A30D-69061D33D1B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE725DAC-C637-4DA7-A30D-69061D33D1B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE725DAC-C637-4DA7-A30D-69061D33D1B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE725DAC-C637-4DA7-A30D-69061D33D1B2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
