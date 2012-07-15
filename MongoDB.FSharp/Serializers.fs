@@ -1,6 +1,7 @@
 ﻿namespace MongoDB.FSharp
 
 open System
+open System.Reflection
 open MongoDB.Bson
 open MongoDB.Bson.IO
 open MongoDB.Bson.Serialization
@@ -100,6 +101,11 @@ module Serializers =
             let classMap = Activator.CreateInstance(genericType) :?> BsonClassMap
 
             classMap.AutoMap()
+            actualType.GetProperties() |> Seq.where (fun prop -> 
+                classMap.AllMemberMaps |> Seq.exists (fun mm -> mm.MemberInfo = (prop :> MemberInfo)) |> not
+            )
+            |> Seq.where (fun prop -> prop.GetGetMethod() <> null)
+            |> Seq.iter (fun prop -> classMap.MapMember(prop :> MemberInfo) |> ignore )
 
             match getMember actualType "Id" "_id" with
             | Some memberInfo -> classMap.MapIdMember memberInfo |> ignore
@@ -112,29 +118,53 @@ module Serializers =
     let ensureClassMapRegistered actualType =
         let fn = BsonClassMap.IsClassMapRegistered 
         match getClassMap fn actualType with
-        | Some map -> map |> BsonClassMap.RegisterClassMap
-        | None -> ()
+        | Some map -> 
+            map |> BsonClassMap.RegisterClassMap
+            Some map
+        | None -> 
+            None
 
-    type RecordSerializer() =
+    type RecordSerializer(classMap : BsonClassMap) =
         inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer()
+        let classMapSerializer =
+            let typ = typeof<BsonClassMap>.Assembly.GetType("MongoDB.Bson.Serialization.BsonClassMapSerializer")
+            let ctor = typ.GetConstructor([ typeof<BsonClassMap> ] |> Seq.toArray)
+            ctor.Invoke([ classMap ] |> Seq.cast<Object> |> Seq.toArray) :?> IBsonSerializer
+
+        let idProvider =
+            classMapSerializer :?> IBsonIdProvider
+
+        override this.Serialize(writer : BsonWriter, nominalType : Type, value : Object, options : IBsonSerializationOptions) =
+            classMapSerializer.Serialize(writer, nominalType, value, options)
+
+        override this.Deserialize(reader : BsonReader, nominalType : Type, options : IBsonSerializationOptions) =
+            classMapSerializer.Deserialize(reader, nominalType, options)
+
+        interface IBsonIdProvider with
+            member this.GetDocumentId(document : Object, id : Object byref, nominalType : Type byref, idGenerator : IIdGenerator byref) =
+                idProvider.GetDocumentId(document, ref id, ref nominalType, ref idGenerator)
+
+            member this.SetDocumentId(document : Object, id : Object) =
+                idProvider.SetDocumentId(document, id)
 
 
-    type RecordSerializationProvider() =
-        let recordType (typ : Type) =
+    type FsharpSerializationProvider() =
+        let fsharpType (typ : Type) =
             typ.GetCustomAttributes(typeof<CompilationMappingAttribute>, true) 
                 |> Seq.cast<CompilationMappingAttribute>
                 |> Seq.map(fun t -> t.SourceConstructFlags)
                 |> Seq.tryHead
 
-        let recordSerializer = lazy ()
-            
         interface IBsonSerializationProvider with
             member this.GetSerializer(typ : Type) =
-                match recordType typ with
+                match fsharpType typ with
                 | Some SourceConstructFlags.RecordType ->
-                    ensureClassMapRegistered typ
-                    null // let BsonClassMapSerializerProvider pick it up. We've already
-                         // done the work to ensure it's mapped correctly
+                    match ensureClassMapRegistered typ with
+                    | Some classMap ->
+                        //RecordSerializer(classMap) :> IBsonSerializer
+                        null
+                    // return null means to try the next provider to see if it has a better answer
+                    | None -> null
 
                 // other F# types, when we're ready (list, seq, discriminated union)
                 | Some SourceConstructFlags.SumType ->
@@ -151,6 +181,6 @@ module Serializers =
     /// Registers all F# serializers
     let Register() =
         if not isRegistered then
-            BsonSerializer.RegisterSerializationProvider(RecordSerializationProvider())
+            BsonSerializer.RegisterSerializationProvider(FsharpSerializationProvider())
             BsonSerializer.RegisterGenericSerializerDefinition(typeof<list<_>>, typeof<ListSerializer<_>>)
             isRegistered <- true
