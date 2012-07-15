@@ -62,3 +62,14 @@ type ``When serializing lists``() =
         let test = fromDb.["Name"].AsString
         Assert.Equal<string>("test", test)
 
+    [<Fact>]
+    member this.``It can deserialize records``() =
+        let id = BsonObjectId.GenerateNewId()
+        let document = BsonDocument([BsonElement("_id", id); BsonElement("Name", BsonString("value"))])
+        let collection = db.GetCollection "objects"
+        collection.Save(document) |> ignore
+
+        let collection = db.GetCollection<RecordType>("objects")
+        let fromDb = collection.FindOneById(id)
+        Assert.NotNull(fromDb)
+        Assert.Equal<string>("value", fromDb.Name)
