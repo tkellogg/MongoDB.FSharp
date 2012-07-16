@@ -16,9 +16,19 @@ type RecordType = {
     Name : string
 }
 
+type DimmerSwitch =
+    | Off
+    | Dim of int
+    | DimMarquee of int * string
+    | On
+
 type ObjectWithOptions() =
     member val Id : BsonObjectId = BsonObjectId.GenerateNewId() with get, set
     member val Age : int option = None with get, set
+
+type ObjectWithDimmer() =
+    member val Id : BsonObjectId = BsonObjectId.GenerateNewId() with get, set
+    member val Switch : DimmerSwitch = Off with get, set
 
 type ``When serializing lists``() = 
     let db = MongoDatabase.Create "mongodb://localhost/test"
@@ -95,4 +105,23 @@ type ``When serializing lists``() =
         let array = value.AsBsonArray
         Assert.Equal(1, array.Count)
         Assert.Equal(42, array.[0].AsInt32)
+
+    [<Fact>]
+    member this.``It can serialize DimmerSwitch types``() =
+        let collection = db.GetCollection<ObjectWithOptions> "objects"
+        let obj = ObjectWithDimmer()
+        obj.Switch <- DimMarquee(42, "loser")
+        collection.Save obj |> ignore
+
+        let collection = db.GetCollection "objects"
+        let fromDb = collection.FindOneById(obj.Id)
+        let switch = fromDb.GetElement("Switch")
+        Assert.NotNull(switch);
+        Assert.Equal<string>("DimMarquee", switch.Value.AsBsonDocument.GetElement("_t").Value.AsString)
+        let value = switch.Value.AsBsonDocument.GetElement("_v").Value
+        Assert.True(value.IsBsonArray)
+        let array = value.AsBsonArray
+        Assert.Equal(2, array.Count)
+        Assert.Equal(42, array.[0].AsInt32)
+        Assert.Equal<string>("loser", array.[1].AsString)
 
