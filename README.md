@@ -29,10 +29,16 @@ instance, disriminated unions:
 
 ```ocaml
 type DimmerSwitch =
-		| Off
-		| Dim of int
-		| DimMarquee of int * string
-		| On
+  | Off
+  | Dim of int
+  | DimMarquee of int * string
+  | On
+
+type ObjectWithDimmers() =
+  member val Id : BsonObjectId = BsonObjectId.GenerateNewId() with get, set
+  member val Kitchen : DimmerSwitch = Off with get, set
+  member val Bedroom1 : DimmerSwitch = Off with get, set
+  member val Bedroom2 : DimmerSwitch = Off with get, set
 
 let collection = db.GetCollection<ObjectWithDimmers> "objects"
 let obj = ObjectWithDimmers()

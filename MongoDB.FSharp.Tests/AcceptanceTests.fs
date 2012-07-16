@@ -160,12 +160,12 @@ type ``When serializing lists``() =
         let fromDb = collection.FindOneById obj.Id
         match fromDb.Kitchen with
         | Off -> ()
-        | _ -> fail ""
+        | _ -> fail "Kitchen light wasn't off"
 
         match fromDb.Bedroom1 with
         | Dim 42 -> ()
-        | _ -> fail ""
+        | _ -> fail "Bedroom1 light wasn't dim enough"
 
         match fromDb.Bedroom2 with
         | DimMarquee(12, "when I was little...") -> ()
-        | _ -> fail ""
+        | _ -> fail "Bedroom2 doesn't have the party we thought"
