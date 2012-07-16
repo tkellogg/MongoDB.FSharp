@@ -2,6 +2,7 @@
 
 open System
 open System.Reflection
+open Microsoft.FSharp.Reflection
 open MongoDB.Bson
 open MongoDB.Bson.IO
 open MongoDB.Bson.Serialization
@@ -148,6 +149,26 @@ module Serializers =
                 idProvider.SetDocumentId(document, id)
 
 
+    type UnionCaseSerializer() =
+        inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer()
+
+        override this.Serialize(writer : BsonWriter, nominalType : Type, value : Object, options : IBsonSerializationOptions) =
+            writer.WriteStartDocument()
+            let info, values = FSharpValue.GetUnionFields(value, nominalType)
+            writer.WriteName("_t")
+            writer.WriteString(info.Name)
+            writer.WriteName("_v")
+            writer.WriteStartArray()
+            values |> Seq.zip(info.GetFields()) |> Seq.iter (fun (field, value) ->
+                let itemSerializer = BsonSerializer.LookupSerializer(field.PropertyType)
+                itemSerializer.Serialize(writer, field.PropertyType, value, options)
+            )
+            writer.WriteEndArray()
+            writer.WriteEndDocument()
+
+        override this.Deserialize(reader : BsonReader, nominalType : Type, options : IBsonSerializationOptions) =
+            null
+
     type FsharpSerializationProvider() =
         let fsharpType (typ : Type) =
             typ.GetCustomAttributes(typeof<CompilationMappingAttribute>, true) 
@@ -172,8 +193,13 @@ module Serializers =
                     if typ.IsGenericType && typ.GetGenericTypeDefinition() = typedefof<List<_>> then
                          typedefof<ListSerializer<_>>.MakeGenericType(typ.GetGenericArguments())
                          |> Activator.CreateInstance :?> IBsonSerializer
+                    elif FSharpType.IsUnion typ then
+                        UnionCaseSerializer() :> IBsonSerializer
                     else
                         null
+
+                | Some SourceConstructFlags.UnionCase ->
+                    UnionCaseSerializer() :> IBsonSerializer
                 | _ -> null
 
     let mutable isRegistered = false

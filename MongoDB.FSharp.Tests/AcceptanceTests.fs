@@ -16,6 +16,10 @@ type RecordType = {
     Name : string
 }
 
+type ObjectWithOptions() =
+    member val Id : BsonObjectId = BsonObjectId.GenerateNewId() with get, set
+    member val Age : int option = None with get, set
+
 type ``When serializing lists``() = 
     let db = MongoDatabase.Create "mongodb://localhost/test"
     do
@@ -62,7 +66,7 @@ type ``When serializing lists``() =
         let test = fromDb.["Name"].AsString
         Assert.Equal<string>("test", test)
 
-    [<Fact>]
+    [<Fact(Skip = "Relies on CSHARP-528 from official C# driver")>]
     member this.``It can deserialize records``() =
         let id = BsonObjectId.GenerateNewId()
         let document = BsonDocument([BsonElement("_id", id); BsonElement("Name", BsonString("value"))])
@@ -73,3 +77,22 @@ type ``When serializing lists``() =
         let fromDb = collection.FindOneById(id)
         Assert.NotNull(fromDb)
         Assert.Equal<string>("value", fromDb.Name)
+
+    [<Fact>]
+    member this.``It can serialize option types``() =
+        let collection = db.GetCollection<ObjectWithOptions> "objects"
+        let obj = ObjectWithOptions()
+        obj.Age <- Some 42
+        collection.Save obj |> ignore
+
+        let collection = db.GetCollection "objects"
+        let fromDb = collection.FindOneById(obj.Id)
+        let age = fromDb.GetElement("Age")
+        Assert.NotNull(age);
+        Assert.Equal<string>("Some", age.Value.AsBsonDocument.GetElement("_t").Value.AsString)
+        let value = age.Value.AsBsonDocument.GetElement("_v").Value
+        Assert.True(value.IsBsonArray)
+        let array = value.AsBsonArray
+        Assert.Equal(1, array.Count)
+        Assert.Equal(42, array.[0].AsInt32)
+
