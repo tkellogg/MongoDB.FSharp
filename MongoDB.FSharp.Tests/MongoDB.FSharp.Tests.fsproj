@@ -54,6 +54,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="TestUtils.fs" />
     <Compile Include="AcceptanceTests.fs" />
     <Compile Include="SerializersTests.fs" />
     <None Include="packages.config" />

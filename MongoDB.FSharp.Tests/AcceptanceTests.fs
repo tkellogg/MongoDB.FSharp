@@ -7,6 +7,8 @@ open MongoDB.Bson
 open MongoDB.Driver
 open MongoDB.FSharp
 
+open TestUtils
+
 type ObjectWithList() =
     member val Id : BsonObjectId = BsonObjectId.GenerateNewId() with get, set
     member val List : string list = [] with get, set
@@ -124,4 +126,19 @@ type ``When serializing lists``() =
         Assert.Equal(2, array.Count)
         Assert.Equal(42, array.[0].AsInt32)
         Assert.Equal<string>("loser", array.[1].AsString)
+
+    [<Fact>]
+    member this.``It can deserialize option types``() =
+        let id = BsonObjectId.GenerateNewId()
+        let arrayPart = BsonArray([ BsonInt32(42) ])
+        let structure = BsonDocument(BsonElement("_t", BsonString("Some")), BsonElement("_v", arrayPart))
+        let document = BsonDocument(BsonElement("_id", id), BsonElement("Age", structure))
+        let collection = db.GetCollection "objects"
+        collection.Save(document) |> ignore
+
+        let collection = db.GetCollection<ObjectWithOptions> "objects"
+        let fromDb = collection.FindOneById id
+        match fromDb.Age with
+        | Some 42 -> ()
+        | _ -> fail "expected Some 42 but got something else"
 

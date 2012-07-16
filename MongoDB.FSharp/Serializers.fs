@@ -152,6 +152,14 @@ module Serializers =
     type UnionCaseSerializer() =
         inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer()
 
+        let readItems (reader : BsonReader) (types : Type seq) (options : IBsonSerializationOptions) =
+            types |> Seq.fold(fun state t ->
+                let serializer = BsonSerializer.LookupSerializer(t)
+                let item = serializer.Deserialize(reader, t, options)
+                item :: state
+            ) []
+            |> Seq.toArray |> Array.rev
+
         override this.Serialize(writer : BsonWriter, nominalType : Type, value : Object, options : IBsonSerializationOptions) =
             writer.WriteStartDocument()
             let info, values = FSharpValue.GetUnionFields(value, nominalType)
@@ -166,8 +174,18 @@ module Serializers =
             writer.WriteEndArray()
             writer.WriteEndDocument()
 
-        override this.Deserialize(reader : BsonReader, nominalType : Type, options : IBsonSerializationOptions) =
-            null
+        override this.Deserialize(reader : BsonReader, nominalType : Type, actualType : Type, options : IBsonSerializationOptions) =
+            reader.ReadStartDocument()
+            reader.ReadName("_t")
+            let typeName = reader.ReadString()
+            let unionType = 
+                FSharpType.GetUnionCases(nominalType) 
+                |> Seq.where (fun case -> case.Name = typeName) |> Seq.head
+            reader.ReadStartArray()
+            let items = readItems reader (unionType.GetFields() |> Seq.map(fun f -> f.PropertyType)) options
+            reader.ReadEndArray()
+            reader.ReadEndDocument()
+            FSharpValue.MakeUnion(unionType, items)
 
     type FsharpSerializationProvider() =
         let fsharpType (typ : Type) =

@@ -3,11 +3,10 @@
 open Xunit
 
 open MongoDB.FSharp.Serializers
+open TestUtils
 
 
 type ``When registering classes``() =
-    let fail msg =
-        Assert.True(false, msg)
 
     let stubbed = getClassMap (fun t -> false)
     
