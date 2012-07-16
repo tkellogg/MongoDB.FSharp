@@ -32,6 +32,12 @@ type ObjectWithDimmer() =
     member val Id : BsonObjectId = BsonObjectId.GenerateNewId() with get, set
     member val Switch : DimmerSwitch = Off with get, set
 
+type ObjectWithDimmers() =
+    member val Id : BsonObjectId = BsonObjectId.GenerateNewId() with get, set
+    member val Kitchen : DimmerSwitch = Off with get, set
+    member val Bedroom1 : DimmerSwitch = Off with get, set
+    member val Bedroom2 : DimmerSwitch = Off with get, set
+
 type ``When serializing lists``() = 
     let db = MongoDatabase.Create "mongodb://localhost/test"
     do
@@ -142,3 +148,24 @@ type ``When serializing lists``() =
         | Some 42 -> ()
         | _ -> fail "expected Some 42 but got something else"
 
+    [<Fact>]
+    member this.``We can integrate serialize & deserialize on DimmerSwitches``() =
+        let collection = db.GetCollection<ObjectWithDimmers> "objects"
+        let obj = ObjectWithDimmers()
+        obj.Kitchen <- Off
+        obj.Bedroom1 <- Dim 42
+        obj.Bedroom2 <- DimMarquee(12, "when I was little...")
+        collection.Save obj |> ignore
+
+        let fromDb = collection.FindOneById obj.Id
+        match fromDb.Kitchen with
+        | Off -> ()
+        | _ -> fail ""
+
+        match fromDb.Bedroom1 with
+        | Dim 42 -> ()
+        | _ -> fail ""
+
+        match fromDb.Bedroom2 with
+        | DimMarquee(12, "when I was little...") -> ()
+        | _ -> fail ""
