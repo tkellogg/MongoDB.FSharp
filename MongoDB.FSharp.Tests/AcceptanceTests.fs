@@ -84,7 +84,7 @@ type ``When serializing lists``() =
         let test = fromDb.["Name"].AsString
         Assert.Equal<string>("test", test)
 
-    [<Fact(Skip = "Relies on CSHARP-528 from official C# driver")>]
+    [<Fact>]
     member this.``It can deserialize records``() =
         let id = BsonObjectId.GenerateNewId()
         let document = BsonDocument([BsonElement("_id", id); BsonElement("Name", BsonString("value"))])

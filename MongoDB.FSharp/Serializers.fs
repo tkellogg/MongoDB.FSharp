@@ -87,6 +87,12 @@ module Serializers =
                 BsonSerializationInfo(elementName, serializer, nominalType, null)
 
 
+    let fsharpType (typ : Type) =
+        typ.GetCustomAttributes(typeof<CompilationMappingAttribute>, true) 
+            |> Seq.cast<CompilationMappingAttribute>
+            |> Seq.map(fun t -> t.SourceConstructFlags)
+            |> Seq.tryHead
+
     let getClassMap isClassMapRegistered (actualType : Type) =
         let rec getMember (_type : Type) name other =
             let memberInfos = _type.GetMember name
@@ -102,15 +108,27 @@ module Serializers =
             let classMap = Activator.CreateInstance(genericType) :?> BsonClassMap
 
             classMap.AutoMap()
+            // TODO: don't just map properties -> anything public, maybe consider using C#'s conventions to some extent
             actualType.GetProperties() |> Seq.where (fun prop -> 
                 classMap.AllMemberMaps |> Seq.exists (fun mm -> mm.MemberInfo = (prop :> MemberInfo)) |> not
             )
             |> Seq.where (fun prop -> prop.GetGetMethod() <> null)
             |> Seq.iter (fun prop -> classMap.MapMember(prop :> MemberInfo) |> ignore )
 
+            // TODO: use conventions
             match getMember actualType "Id" "_id" with
             | Some memberInfo -> classMap.MapIdMember memberInfo |> ignore
             | None -> ()
+
+            match fsharpType actualType with 
+            | Some SourceConstructFlags.RecordType -> 
+                // Map creator function. Requires Mongo >1.8
+                match actualType.GetConstructors() |> Seq.sortBy (fun c -> c.GetParameters().Length) |> Seq.tryHead with
+                | Some c -> 
+                    let parms = classMap.DeclaredMemberMaps |> Seq.map (fun m -> m.ElementName) |> Array.ofSeq
+                    classMap.MapConstructor (c, parms) |> ignore
+                | None -> ()
+            | _ -> ()
 
             classMap.Freeze() |> Some
         else 
@@ -127,10 +145,18 @@ module Serializers =
 
     type RecordSerializer(classMap : BsonClassMap) =
         inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer()
+
         let classMapSerializer =
             let typ = typeof<BsonClassMap>.Assembly.GetType("MongoDB.Bson.Serialization.BsonClassMapSerializer")
             let ctor = typ.GetConstructor([ typeof<BsonClassMap> ] |> Seq.toArray)
             ctor.Invoke([ classMap ] |> Seq.cast<Object> |> Seq.toArray) :?> IBsonSerializer
+
+        let getter = 
+            match classMap.IdMemberMap with
+            | null -> 
+                // TODO: Allow mutable record types
+                raise (InvalidOperationException("Record types must have Id member assigned if you want to use Save. Otherwise just use Insert or Delete. Thanks!"))
+            | mm -> mm.Getter
 
         let idProvider =
             classMapSerializer :?> IBsonIdProvider
@@ -143,6 +169,7 @@ module Serializers =
 
         interface IBsonIdProvider with
             member this.GetDocumentId(document : Object, id : Object byref, nominalType : Type byref, idGenerator : IIdGenerator byref) =
+                id <- getter.DynamicInvoke([document] |> Array.ofList)
                 idProvider.GetDocumentId(document, ref id, ref nominalType, ref idGenerator)
 
             member this.SetDocumentId(document : Object, id : Object) =
@@ -188,11 +215,6 @@ module Serializers =
             FSharpValue.MakeUnion(unionType, items)
 
     type FsharpSerializationProvider() =
-        let fsharpType (typ : Type) =
-            typ.GetCustomAttributes(typeof<CompilationMappingAttribute>, true) 
-                |> Seq.cast<CompilationMappingAttribute>
-                |> Seq.map(fun t -> t.SourceConstructFlags)
-                |> Seq.tryHead
 
         interface IBsonSerializationProvider with
             member this.GetSerializer(typ : Type) =
@@ -200,8 +222,8 @@ module Serializers =
                 | Some SourceConstructFlags.RecordType ->
                     match ensureClassMapRegistered typ with
                     | Some classMap ->
-                        //RecordSerializer(classMap) :> IBsonSerializer
-                        null
+                        RecordSerializer(classMap) :> IBsonSerializer
+
                     // return null means to try the next provider to see if it has a better answer
                     | None -> null
 
