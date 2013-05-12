@@ -5,7 +5,11 @@ open Swensen.Unquote
 open Swensen.Unquote.Assertions
 open MongoDB.Bson
 open MongoDB.Driver
+open MongoDB.Driver.Linq
+
 open MongoDB.FSharp
+open System.Linq
+open Microsoft.FSharp.Linq
 
 open TestUtils
 
@@ -16,6 +20,18 @@ type ObjectWithList() =
 type RecordType = {
     Id : BsonObjectId
     Name : string
+}
+
+type Child = {
+    ChildName: string
+    Age: int
+}
+
+type Person = {
+    Id: BsonObjectId
+    PersonName: string
+    Age: int
+    Childs: Child seq
 }
 
 type DimmerSwitch =
@@ -44,8 +60,9 @@ type ``When serializing lists``() =
         Serializers.Register()
 
     interface System.IDisposable with
-        member this.Dispose() =
+        member this.Dispose() = 
             db.DropCollection "objects" |> ignore
+            db.DropCollection "persons" |> ignore
 
     /// Seems to be fixed in version 1.5 of the C# driver
     [<Fact>]
@@ -95,6 +112,31 @@ type ``When serializing lists``() =
         let fromDb = collection.FindOneById(id)
         Assert.NotNull(fromDb)
         Assert.Equal<string>("value", fromDb.Name)
+
+    [<Fact>]
+    member this.``It can serialize and deserialize nested records``() =
+        let collection = db.GetCollection<Person> "persons"
+        let obj = { Id = BsonObjectId.GenerateNewId(); PersonName = "test"; Age = 33; Childs = [{ChildName = "Adrian"; Age = 3}] }
+        collection.Save obj |> ignore
+
+        let genCollection = db.GetCollection<Person> "persons"
+        let person = query { 
+            for p in genCollection.AsQueryable() do 
+            where (p.Id = obj.Id) 
+            select p
+            headOrDefault
+        }
+
+        Assert.NotNull person
+        Assert.Equal<string>("test",person.PersonName)
+        Assert.Equal<int>(33,person.Age)
+        Assert.Equal<int>(1 ,person.Childs |> Seq.length)
+
+        let child = person.Childs |> Seq.head
+
+        Assert.Equal<string>("Adrian", child.ChildName)
+        Assert.Equal<int>(3, child.Age)
+
 
     [<Fact>]
     member this.``It can serialize option types``() =

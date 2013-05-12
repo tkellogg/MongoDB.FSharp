@@ -39,9 +39,7 @@ module Serializers =
                 let lst = value :?> list<'T>
                 writer.WriteStartArray()
                 
-                lst |> List.iter (fun item -> 
-                    BsonSerializer.Serialize(writer, typeof<'T>)
-                )
+                lst |> List.iter (fun x -> BsonSerializer.Serialize (writer,typeof<'T>, x))
 
                 writer.WriteEndArray()
 
@@ -89,9 +87,9 @@ module Serializers =
 
     let fsharpType (typ : Type) =
         typ.GetCustomAttributes(typeof<CompilationMappingAttribute>, true) 
-            |> Seq.cast<CompilationMappingAttribute>
-            |> Seq.map(fun t -> t.SourceConstructFlags)
-            |> Seq.tryHead
+        |> Seq.cast<CompilationMappingAttribute>
+        |> Seq.map(fun t -> t.SourceConstructFlags)
+        |> Seq.tryHead
 
     let getClassMap isClassMapRegistered (actualType : Type) =
         let rec getMember (_type : Type) name other =
@@ -108,8 +106,10 @@ module Serializers =
             let classMap = Activator.CreateInstance(genericType) :?> BsonClassMap
 
             classMap.AutoMap()
+
             // TODO: don't just map properties -> anything public, maybe consider using C#'s conventions to some extent
-            actualType.GetProperties() |> Seq.where (fun prop -> 
+            actualType.GetProperties() 
+            |> Seq.where (fun prop -> 
                 classMap.AllMemberMaps |> Seq.exists (fun mm -> mm.MemberInfo = (prop :> MemberInfo)) |> not
             )
             |> Seq.where (fun prop -> prop.GetGetMethod() <> null)
@@ -153,13 +153,10 @@ module Serializers =
 
         let getter = 
             match classMap.IdMemberMap with
-            | null -> 
-                // TODO: Allow mutable record types
-                raise (InvalidOperationException("Record types must have Id member assigned if you want to use Save. Otherwise just use Insert or Delete. Thanks!"))
-            | mm -> mm.Getter
+            | null -> None
+            | mm -> Some(mm.Getter)
 
-        let idProvider =
-            classMapSerializer :?> IBsonIdProvider
+        let idProvider = classMapSerializer :?> IBsonIdProvider
 
         override this.Serialize(writer : BsonWriter, nominalType : Type, value : Object, options : IBsonSerializationOptions) =
             classMapSerializer.Serialize(writer, nominalType, value, options)
@@ -167,13 +164,29 @@ module Serializers =
         override this.Deserialize(reader : BsonReader, nominalType : Type, options : IBsonSerializationOptions) =
             classMapSerializer.Deserialize(reader, nominalType, options)
 
+        override this.Deserialize(reader : BsonReader, nominalType : Type, actualType : Type, options : IBsonSerializationOptions) =
+            classMapSerializer.Deserialize(reader, nominalType, actualType, options)
+
+
+        interface IBsonDocumentSerializer  with
+            member this.GetMemberSerializationInfo(memberName:string) = 
+                let m = classMap.AllMemberMaps |> Seq.tryFind (fun x -> x.MemberName = memberName)
+                match m with
+                | Some(x) -> new BsonSerializationInfo(x.ElementName, x.GetSerializer(x.MemberType), x.MemberType, x.SerializationOptions)
+                | None -> 
+                    let msg = sprintf "Class has no member called %s" memberName 
+                    raise(ArgumentOutOfRangeException(msg))       
+                
+
         interface IBsonIdProvider with
             member this.GetDocumentId(document : Object, id : Object byref, nominalType : Type byref, idGenerator : IIdGenerator byref) =
-                id <- getter.DynamicInvoke([document] |> Array.ofList)
-                idProvider.GetDocumentId(document, ref id, ref nominalType, ref idGenerator)
+                match getter with
+                | Some(i) -> 
+                    id <- i.DynamicInvoke(([document] |> Array.ofList))
+                    idProvider.GetDocumentId(document, ref id, ref nominalType, ref idGenerator)
+                | None -> false
 
-            member this.SetDocumentId(document : Object, id : Object) =
-                idProvider.SetDocumentId(document, id)
+            member this.SetDocumentId(document : Object, id : Object) = idProvider.SetDocumentId(document, id)
 
 
     type UnionCaseSerializer() =
@@ -218,12 +231,11 @@ module Serializers =
 
         interface IBsonSerializationProvider with
             member this.GetSerializer(typ : Type) =
-                match fsharpType typ with
+                let t = fsharpType typ
+                match t with
                 | Some SourceConstructFlags.RecordType ->
                     match ensureClassMapRegistered typ with
-                    | Some classMap ->
-                        RecordSerializer(classMap) :> IBsonSerializer
-
+                    | Some classMap -> RecordSerializer(classMap) :> IBsonSerializer
                     // return null means to try the next provider to see if it has a better answer
                     | None -> null
 
@@ -238,8 +250,7 @@ module Serializers =
                     else
                         null
 
-                | Some SourceConstructFlags.UnionCase ->
-                    UnionCaseSerializer() :> IBsonSerializer
+                | Some SourceConstructFlags.UnionCase -> UnionCaseSerializer() :> IBsonSerializer
                 | _ -> null
 
     let mutable isRegistered = false
