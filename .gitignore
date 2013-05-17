@@ -63,6 +63,13 @@ local.properties
 .builds
 *.dotCover
 
+# Vim backups
+*~
+
+# NuGet intermediate folders
+build/
+dist/
+
 ## TODO: If you have NuGet Package Restore enabled, uncomment this
 packages/
 
