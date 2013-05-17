@@ -6,6 +6,12 @@ such as immutable lists, immutable record types and discriminated unions (to
 name a few).
 
 
+Installation
+============
+
+[`Install-Package MongoDB.FSharp`](https://nuget.org/packages/MongoDB.FSharp/)
+
+
 Usage
 ==========
 
