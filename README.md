@@ -7,12 +7,22 @@ aren't properly
 Installation
 ============
 
-Install NuGet and run this from the Package Manager Console.
+Note also that this requires at least version 1.8.1 of the official MongoDB driver. That
+version includes some API that makes this whole project possible.
+
+Install NuGet and run this from the Package Manager Console. The F# driver builds on top of 
+the officiel C# driver so first you need to install the C# driver
+
+    PM> Install-Package mongocsharpdriver
+
+and then you install the F# driver
 
     PM> Install-Package MongoDB.FSharp
 
-Note also that this requires at least version 1.8.1 of the official MongoDB driver. That
-version includes some API that makes this whole project possible.
+To use the C# driver just type
+
+    open MongoDB.Bson
+    open MongoDB.Driver
 
 Somewhere during startup you have to register MongoDB.FSharp. It's basically a one-liner 
 that looks like:
@@ -30,10 +40,14 @@ Use MongoDB.FSharp like you normally would in C#.
 ```ocaml
 type Person = { Id : BsonObjectId; Name : string; Scores : int list }
 
-let db = MongoDB.Driver.MongoDatabase.Create "mongodb://localhost/test"
+let connectionString = "mongodb://localhost"
+let client = new MongoClient(connectionString)
+let server = client.GetServer();
+let db = server.GetDatabase("test")
+
 let collection = db.GetCollection<Person> "people"
 
-let id = BsonObjectId.GenerateNewId ()
+let id = BsonObjectId(ObjectId.GenerateNewId())
 collection.Insert { Id = id; Name = "George"; Scores = [13; 52; 6] }
 
 let george = collection.FindOne(Query.EQ("_id", id))
