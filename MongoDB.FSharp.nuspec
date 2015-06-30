@@ -2,9 +2,9 @@
 <package >
   <metadata>
     <id>MongoDB.FSharp</id>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <title>MongoDB.FSharp</title>
-    <authors>Tim Kellogg</authors>
+    <authors>Tim Kellogg, Sebastian Faltoni</authors>
     <owners>Tim Kellogg</owners>
     <licenseUrl>https://github.com/tkellogg/MongoDB.FSharp/blob/master/License.txt</licenseUrl>
     <projectUrl>https://github.com/tkellogg/MongoDB.FSharp</projectUrl>
@@ -12,7 +12,7 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Silent utilities to make the official MongoDB driver feel natural to work with in F#</description>
     <releaseNotes>Initial release, should work but not recommended for production</releaseNotes>
-    <copyright>Copyright 2013</copyright>
+    <copyright>Copyright 2015</copyright>
     <tags>f# fsharp mongodB nosql utility</tags>
   </metadata>
 </package>
