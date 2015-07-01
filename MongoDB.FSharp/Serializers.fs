@@ -251,7 +251,8 @@ module Serializers =
                          typedefof<ListSerializer<_>>.MakeGenericType(typ.GetGenericArguments())
                          |> Activator.CreateInstance :?> IBsonSerializer
                     elif FSharpType.IsUnion typ then
-                        UnionCaseSerializer() :> IBsonSerializer
+                         typedefof<UnionCaseSerializer<_>>.MakeGenericType(typ)
+                         |> Activator.CreateInstance :?> IBsonSerializer
                     else
                         null
 

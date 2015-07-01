@@ -63,8 +63,8 @@ type ``When serializing lists``() =
     interface System.IDisposable with
         member this.Dispose() = 
             ()
-          //  db.DropCollectionAsync "objects" |> awaitTask |> ignore
-          //  db.DropCollectionAsync "persons" |> awaitTask |> ignore
+            db.DropCollectionAsync "objects" |> AwaitVoidTask |> ignore
+            db.DropCollectionAsync "persons" |> AwaitVoidTask |> ignore
 
     /// Seems to be fixed in version 1.5 of the C# driver
     [<Fact>]
@@ -80,7 +80,7 @@ type ``When serializing lists``() =
                               |> Async.AwaitTask
                 let array = fromDb.List
                 Assert.Equal(2, array.Length)
-            } |> Async.StartImmediate
+            } |> Async.RunSynchronously
         
     [<Fact>]
     member this.``It can deserialze lists``() =
@@ -109,7 +109,7 @@ type ``When serializing lists``() =
                 let! fromDb = collection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
                                       |> Async.AwaitTask
                 Assert.Equal<string>("test", fromDb.Name)
-            } |> Async.StartImmediate
+            } |> Async.RunSynchronously
 
     [<Fact>]
     member this.``It can deserialize records``() =
@@ -124,7 +124,7 @@ type ``When serializing lists``() =
                                       |> Async.AwaitTask
             Assert.NotNull(fromDb)
             Assert.Equal<string>("value", fromDb.Name)
-        }|> Async.StartImmediate
+        }|> Async.RunSynchronously
 
     [<Fact>]
     member this.``It can serialize and deserialize nested records``() =
@@ -162,8 +162,9 @@ type ``When serializing lists``() =
             do! collection.InsertOneAsync obj |> AwaitVoidTask
 
             let collection = db.GetCollection "objects"
-            let! fromDb = collection.Find<BsonDocument>(fun (x:BsonDocument) -> 
-                                                        (unbox (x.GetElement( "_id").Value)) = obj.Id).FirstAsync() 
+            let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
+                    |> (fun d -> d.Add("_id",obj.Id)))
+            let! fromDb = collection.Find<BsonDocument>(filter).FirstAsync() 
                                                         |> Async.AwaitTask
             let age = fromDb.GetElement("Age")
             Assert.NotNull(age);
@@ -173,19 +174,21 @@ type ``When serializing lists``() =
             let array = value.AsBsonArray
             Assert.Equal(1, array.Count)
             Assert.Equal(42, array.[0].AsInt32)
-        } |> Async.StartImmediate
+        } |> Async.RunSynchronously
 
     [<Fact>]
     member this.``It can serialize DimmerSwitch types``() =
         async {
             let collection = db.GetCollection<ObjectWithOptions> "objects"
             let obj = ObjectWithDimmer()
-            obj.Switch <- DimMarquee(42, "loser")
+            obj.Switch <- DimMarquee(42, "loser") 
             do! db.GetCollection<ObjectWithDimmer>("objects").InsertOneAsync (obj) |> AwaitVoidTask
 
-            let collection = db.GetCollection "objects"
-            let! fromDb = collection.Find<BsonDocument>(fun (x:BsonDocument) -> 
-                                                        (unbox (x.GetElement( "_id").Value)) = obj.Id).FirstAsync() 
+            let collection = db.GetCollection<BsonDocument> "objects"
+            
+            let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
+                    |> (fun d -> d.Add("_id",obj.Id)))
+            let! fromDb = collection.Find(filter).FirstAsync()
                                                         |> Async.AwaitTask
             let switch = fromDb.GetElement("Switch")
             Assert.NotNull(switch);
@@ -196,7 +199,8 @@ type ``When serializing lists``() =
             Assert.Equal(2, array.Count)
             Assert.Equal(42, array.[0].AsInt32)
             Assert.Equal<string>("loser", array.[1].AsString)
-        }
+        } |> Async.RunSynchronously
+
     [<Fact>]
     member this.``It can deserialize option types``() =
         async {
@@ -214,7 +218,7 @@ type ``When serializing lists``() =
             match fromDb.Age with
             | Some 42 -> ()
             | _ -> fail "expected Some 42 but got something else"
-        } |> Async.StartImmediate
+        } |> Async.RunSynchronously
 
     [<Fact>]
     member this.``We can integrate serialize & deserialize on DimmerSwitches``() =
@@ -238,4 +242,4 @@ type ``When serializing lists``() =
             match fromDb.Bedroom2 with
             | DimMarquee(12, "when I was little...") -> ()
             | _ -> fail "Bedroom2 doesn't have the party we thought"
-          }
+          } |> Async.RunSynchronously
