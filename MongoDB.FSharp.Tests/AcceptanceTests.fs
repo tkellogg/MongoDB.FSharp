@@ -62,8 +62,9 @@ type ``When serializing lists``() =
 
     interface System.IDisposable with
         member this.Dispose() = 
-            db.DropCollectionAsync "objects" |> awaitTask |> ignore
-            db.DropCollectionAsync "persons" |> awaitTask |> ignore
+            ()
+          //  db.DropCollectionAsync "objects" |> awaitTask |> ignore
+          //  db.DropCollectionAsync "persons" |> awaitTask |> ignore
 
     /// Seems to be fixed in version 1.5 of the C# driver
     [<Fact>]
@@ -72,7 +73,7 @@ type ``When serializing lists``() =
                 let collection = db.GetCollection<ObjectWithList> "objects"
                 let obj = ObjectWithList()
                 obj.List <- [ "hello"; "world" ]
-                do! collection.InsertOneAsync obj |> awaitTask
+                do! collection.InsertOneAsync obj |> AwaitVoidTask
 
                 let genCollection = db.GetCollection<ObjectWithList> "objects"
                 let! fromDb = genCollection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
@@ -88,7 +89,7 @@ type ``When serializing lists``() =
                 let id = BsonObjectId(ObjectId.GenerateNewId())
                 let document = BsonDocument([ BsonElement("_id", id); BsonElement("List", list) ])
                 let collection = db.GetCollection "objects"
-                do! collection.InsertOneAsync document |> awaitTask
+                do! collection.InsertOneAsync document |> AwaitVoidTask
 
                 let collection = db.GetCollection<ObjectWithList> "objects"
                 let! fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
@@ -102,7 +103,7 @@ type ``When serializing lists``() =
         async {
                 let collection = db.GetCollection<RecordType> "objects"
                 let obj = { Id = BsonObjectId(ObjectId.GenerateNewId()); Name = "test"  }
-                do! collection.InsertOneAsync obj |> awaitTask
+                do! collection.InsertOneAsync obj |> AwaitVoidTask
 
                 let genCollection = db.GetCollection "objects"
                 let! fromDb = collection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
@@ -116,7 +117,7 @@ type ``When serializing lists``() =
             let id = BsonObjectId(ObjectId.GenerateNewId())
             let document = BsonDocument([BsonElement("_id", id); BsonElement("Name", BsonString("value"))])
             let collection = db.GetCollection "objects"
-            do! collection.InsertOneAsync(document) |> awaitTask
+            do! collection.InsertOneAsync(document) |> AwaitVoidTask
 
             let collection = db.GetCollection<RecordType>("objects")
             let! fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
@@ -134,7 +135,7 @@ type ``When serializing lists``() =
                         Age = 33; 
                         Childs = [{ChildName = "Adrian";
                         Age = 3}] }
-            do! collection.InsertOneAsync obj |> awaitTask
+            do! collection.InsertOneAsync obj |> AwaitVoidTask
 
             let genCollection = db.GetCollection<Person> "persons"
             let! person = genCollection.Find(fun x -> x.Id = obj.Id).FirstAsync()  
@@ -149,7 +150,7 @@ type ``When serializing lists``() =
 
             Assert.Equal<string>("Adrian", child.ChildName)
             Assert.Equal<int>(3, child.Age)
-        }|> Async.StartImmediate
+        }|> Async.RunSynchronously
 
 
     [<Fact>]
@@ -158,7 +159,7 @@ type ``When serializing lists``() =
             let collection = db.GetCollection<ObjectWithOptions> "objects"
             let obj = ObjectWithOptions()
             obj.Age <- Some 42
-            do! collection.InsertOneAsync obj |> awaitTask
+            do! collection.InsertOneAsync obj |> AwaitVoidTask
 
             let collection = db.GetCollection "objects"
             let! fromDb = collection.Find<BsonDocument>(fun (x:BsonDocument) -> 
@@ -180,7 +181,7 @@ type ``When serializing lists``() =
             let collection = db.GetCollection<ObjectWithOptions> "objects"
             let obj = ObjectWithDimmer()
             obj.Switch <- DimMarquee(42, "loser")
-            do! db.GetCollection<ObjectWithDimmer>("objects").InsertOneAsync (obj) |> awaitTask
+            do! db.GetCollection<ObjectWithDimmer>("objects").InsertOneAsync (obj) |> AwaitVoidTask
 
             let collection = db.GetCollection "objects"
             let! fromDb = collection.Find<BsonDocument>(fun (x:BsonDocument) -> 
@@ -205,7 +206,7 @@ type ``When serializing lists``() =
             let structure = BsonDocument([| BsonElement("_t", BsonString("Some")); BsonElement("_v", arrayPart) |].AsEnumerable())
             let document = BsonDocument([|BsonElement("_id", id); BsonElement("Age", structure)|].AsEnumerable())
             let collection = db.GetCollection "objects"
-            do! collection.InsertOneAsync(document) |> awaitTask
+            do! collection.InsertOneAsync(document) |> AwaitVoidTask
 
             let collection = db.GetCollection<ObjectWithOptions> "objects"
             let! fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
@@ -223,7 +224,7 @@ type ``When serializing lists``() =
             obj.Kitchen <- Off
             obj.Bedroom1 <- Dim 42
             obj.Bedroom2 <- DimMarquee(12, "when I was little...")
-            do! collection.InsertOneAsync obj |> awaitTask
+            do! collection.InsertOneAsync obj |> AwaitVoidTask
 
             let! fromDb = collection.Find(fun x -> x.Id = obj.Id).FirstAsync() |> Async.AwaitTask
             match fromDb.Kitchen with

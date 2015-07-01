@@ -25,47 +25,66 @@ module Serializers =
             this.WriteStartArray()
             this.WriteEndArray()
 
-    type ListSerializer<'T when 'T:null>() as this = 
-        inherit SerializerBase<'T>()
-        override x.Deserialize(ctx:BsonDeserializationContext, args:BsonDeserializationArgs) =
-            let reader = ctx.Reader
-            let readArray() =
-                            seq {
-                                reader.ReadStartArray()
-                                let convention = BsonSerializer.LookupDiscriminatorConvention(typeof<'T>)
-                                while reader.ReadBsonType() <> BsonType.EndOfDocument do
-                                    let actualElementType = convention.GetActualType(reader, typeof<'T>)
-                                    let serializer = BsonSerializer.LookupSerializer(actualElementType)
-                                    let element = serializer.Deserialize(ctx, args)
-                                    yield element :?> 'T
-                                reader.ReadEndArray()
-                            }
-            let readArrayFromObject () =
-                reader.ReadStartDocument()
-                reader.ReadString("_t") |> ignore
-                reader.ReadName("_v")
-                let value = this.Deserialize(ctx, args)
-                reader.ReadEndDocument()
-                value
+    type ListSerializer<'T when 'T:equality>() as this = 
+        inherit SerializerBase<list<'T>>()
 
-            let bsonType = reader.GetCurrentBsonType()
+        override this.Deserialize(context:BsonDeserializationContext , args:BsonDeserializationArgs) : 'T list =        
+
+            let readArray() =
+                seq {
+                    context.Reader.ReadStartArray()
+                    let convention = BsonSerializer.LookupDiscriminatorConvention(typeof<'T>)
+                    while context.Reader.ReadBsonType() <> BsonType.EndOfDocument do
+                        let actualElementType = convention.GetActualType(context.Reader, typeof<'T>)
+                        let serializer = BsonSerializer.LookupSerializer(actualElementType)
+                        let element = serializer.Deserialize(context, args)
+                        yield element :?> 'T
+                    context.Reader.ReadEndArray()
+                }
+
+            let readArrayFromObject () =
+                context.Reader.ReadStartDocument()
+                context.Reader.ReadString("_t") |> ignore
+                context.Reader.ReadName("_v")
+                let value = this.Deserialize(context, args)
+                context.Reader.ReadEndDocument()
+                value
+            
+            let bsonType = context.Reader.GetCurrentBsonType()
             match bsonType with
             | BsonType.Null ->
-                reader.ReadNull()
-                null
-            | BsonType.Array -> box (readArray() |> List.ofSeq) :?> 'T
+                context.Reader.ReadNull()
+                Unchecked.defaultof<'T list>
+            | BsonType.Array -> (readArray() |> List.ofSeq :> obj) :?> 'T list
             | BsonType.Document -> readArrayFromObject ()
             | _ -> 
-                let msg = sprintf "Can't deserialize a %s from BsonType %s" this.ValueType.FullName (bsonType.ToString())
+                let msg = sprintf "Can't deserialize a %s from BsonType %s" args.NominalType.FullName (bsonType.ToString())
                 raise(InvalidOperationException(msg))
+        
+        override this.Serialize(context:BsonSerializationContext,  args:BsonSerializationArgs, value:'T list) =
+            if value = Unchecked.defaultof<'T list> then
+                // There aren't supposed to be null values in F#
+                context.Writer.WriteStartArray()
+                context.Writer.WriteEndArray()
+            else
+                let actualType = value.GetType()
+                //this.VerifyTypes(nominalType, actualType, typeof<list<'T>>)
 
-        interface IBsonArraySerializer with 
-            
-            member x.TryGetItemSerializationInfo(serializationInfo: byref<BsonSerializationInfo>): bool =  
+                let lst = box value :?> list<'T>
+                context.Writer.WriteStartArray()
+                
+                lst |> List.iter (fun x -> BsonSerializer.Serialize (context.Writer,typeof<'T>, x))
+
+                context.Writer.WriteEndArray()
+
+
+
+        interface IBsonArraySerializer with            
+            member x.TryGetItemSerializationInfo(serializationInfo: byref<BsonSerializationInfo>): bool = 
                 let elementName = null
                 let nominalType = typeof<'T>
                 let serializer = BsonSerializer.LookupSerializer nominalType
-                serializationInfo <- BsonSerializationInfo(elementName, serializer, nominalType)
+                serializationInfo <- BsonSerializationInfo(elementName, serializer, nominalType) 
                 true
 
 
