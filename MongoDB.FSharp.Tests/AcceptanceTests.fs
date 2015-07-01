@@ -163,7 +163,7 @@ type ``When serializing lists``() =
 
             let collection = db.GetCollection "objects"
             let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
-                    |> (fun d -> d.Add("_id",obj.Id)))
+                                                                |> (fun d -> d.Add("_id",obj.Id)))
             let! fromDb = collection.Find<BsonDocument>(filter).FirstAsync() 
                                                         |> Async.AwaitTask
             let age = fromDb.GetElement("Age")
@@ -187,7 +187,7 @@ type ``When serializing lists``() =
             let collection = db.GetCollection<BsonDocument> "objects"
             
             let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
-                    |> (fun d -> d.Add("_id",obj.Id)))
+                                                                |> (fun d -> d.Add("_id",obj.Id)))
             let! fromDb = collection.Find(filter).FirstAsync()
                                                         |> Async.AwaitTask
             let switch = fromDb.GetElement("Switch")
