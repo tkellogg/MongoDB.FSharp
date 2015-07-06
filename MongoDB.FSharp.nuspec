@@ -3,7 +3,7 @@
   <metadata>
     <id>MongoDB.Driver.FSharp</id>
     <version>0.2.0</version>
-    <title>MongoDB.FSharp</title>
+    <title>MongoDB.Driver.FSharp</title>
     <authors>Sebastian Faltoni, Tim Kellogg</authors>
     <owners>Sebastian Faltoni</owners>
     <licenseUrl>https://github.com/nukedbit/MongoDB.FSharp/blob/master/License.txt</licenseUrl>
