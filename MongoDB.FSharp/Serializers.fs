@@ -1,12 +1,11 @@
-﻿namespace MongoDB.FSharp
+﻿namespace MongoDB.Driver.FSharp
 
 open System
 open System.Reflection
 open Microsoft.FSharp.Reflection
 open MongoDB.Bson
 open MongoDB.Bson.IO
-open MongoDB.Bson.Serialization
-open MongoDB.Bson.Serialization.Options
+open MongoDB.Bson.Serialization 
 open MongoDB.Bson.Serialization.Serializers
 
 open SerializationOptions
@@ -25,7 +24,7 @@ module Serializers =
             this.WriteStartArray()
             this.WriteEndArray()
 
-    type ListSerializer<'T when 'T:equality>() as this = 
+    type ListSerializer<'T when 'T:equality>() = 
         inherit SerializerBase<list<'T>>()
 
         override this.Deserialize(context:BsonDeserializationContext , args:BsonDeserializationArgs) : 'T list =        
@@ -152,11 +151,6 @@ module Serializers =
         let classMapSerializer =
             Activator.CreateInstance((typedefof<MongoDB.Bson.Serialization.BsonClassMapSerializer<_>>.MakeGenericType(typedefof<'T>)),
                                             [ classMap ] |> Seq.cast<Object> |> Seq.toArray) :?> IBsonSerializer
-
-//            let typ = typeof<BsonClassMap>.Assembly.GetType("MongoDB.Bson.Serialization.BsonClassMapSerializer<`>")
-//            let ctor = typ.GetConstructor([ typeof<BsonClassMap> ] |> Seq.toArray)
-//            ctor.Invoke([ classMap ] |> Seq.cast<Object> |> Seq.toArray) :?> IBsonSerializer
-
         let getter = 
             match classMap.IdMemberMap with
             | null -> None

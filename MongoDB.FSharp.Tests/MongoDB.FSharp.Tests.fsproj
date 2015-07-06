@@ -87,8 +87,10 @@
       <HintPath>..\packages\xunit.1.9.1\lib\net20\xunit.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <ProjectReference Include="..\MongoDB.FSharp\MongoDB.FSharp.fsproj">
-      <Name>MongoDB.FSharp</Name>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MongoDB.FSharp\MongoDB.Driver.FSharp.fsproj">
+      <Name>MongoDB.Driver.FSharp</Name>
       <Project>{7cbeb93a-1590-42db-9e40-61630e79304a}</Project>
       <Private>True</Private>
     </ProjectReference>

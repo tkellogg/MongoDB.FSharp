@@ -2,7 +2,7 @@
 
 open Xunit
 
-open MongoDB.FSharp.Serializers
+open MongoDB.Driver.FSharp.Serializers
 open TestUtils
 
 

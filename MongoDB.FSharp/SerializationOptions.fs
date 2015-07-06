@@ -1,10 +1,6 @@
-﻿namespace MongoDB.FSharp
+﻿namespace MongoDB.Driver.FSharp
 
-open System
-open MongoDB.Bson
-open MongoDB.Bson.Serialization
-open MongoDB.Bson.Serialization.Options
-open MongoDB.Bson.Serialization.Serializers
+open MongoDB.Bson 
 
 module SerializationOptions =
   type System.Object with

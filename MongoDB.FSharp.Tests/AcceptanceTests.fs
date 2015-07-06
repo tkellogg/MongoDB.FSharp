@@ -7,7 +7,7 @@ open MongoDB.Bson
 open MongoDB.Driver
 open MongoDB.Driver.Linq
 
-open MongoDB.FSharp
+open MongoDB.Driver.FSharp
 open System.Linq
 open Microsoft.FSharp.Linq
 

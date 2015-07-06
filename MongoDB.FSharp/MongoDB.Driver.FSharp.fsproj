@@ -8,9 +8,9 @@
     <ProjectGuid>7cbeb93a-1590-42db-9e40-61630e79304a</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>MongoDB.FSharp</RootNamespace>
-    <AssemblyName>MongoDB.FSharp</AssemblyName>
+    <AssemblyName>MongoDB.Driver.FSharp</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <Name>MongoDB.FSharp</Name>
+    <Name>MongoDB.Driver.FSharp</Name>
     <TargetFrameworkProfile />
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
     <RestorePackages>true</RestorePackages>
