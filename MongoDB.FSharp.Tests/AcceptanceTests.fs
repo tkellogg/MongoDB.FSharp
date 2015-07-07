@@ -69,168 +69,167 @@ type ``When serializing lists``() =
     /// Seems to be fixed in version 1.5 of the C# driver
     [<Fact>]
     member this.``It can serialize an object with a list``() =
-            async {
-                let collection = db.GetCollection<ObjectWithList> "objects"
-                let obj = ObjectWithList()
-                obj.List <- [ "hello"; "world" ]
-                do! collection.InsertOneAsync obj |> AwaitVoidTask
+            let collection = db.GetCollection<ObjectWithList> "objects"
+            let obj = ObjectWithList()
+            obj.List <- [ "hello"; "world" ]
+            collection.InsertOneAsync obj |> AwaitVoidTask |> ignore
 
-                let genCollection = db.GetCollection<ObjectWithList> "objects"
-                let! fromDb = genCollection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
-                              |> Async.AwaitTask
-                let array = fromDb.List
-                Assert.Equal(2, array.Length)
-            } |> Async.RunSynchronously
+            let genCollection = db.GetCollection<ObjectWithList> "objects"
+            let fromDb = genCollection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
+                            |> Async.AwaitTask |> Async.RunSynchronously
+            let array = fromDb.List
+            Assert.Equal(2, array.Length)
         
     [<Fact>]
-    member this.``It can deserialze lists``() =
-        async {
-                let list = BsonArray([ "hello"; "world" ])
-                let id = BsonObjectId(ObjectId.GenerateNewId())
-                let document = BsonDocument([ BsonElement("_id", id); BsonElement("List", list) ])
-                let collection = db.GetCollection "objects"
-                do! collection.InsertOneAsync document |> AwaitVoidTask
+    member this.``It can deserialze lists``() =        
+            let list = BsonArray([ "hello"; "world" ])
+            let id = BsonObjectId(ObjectId.GenerateNewId())
+            let document = BsonDocument([ BsonElement("_id", id); BsonElement("List", list) ])
+            let collection = db.GetCollection "objects"
+            collection.InsertOneAsync document |> AwaitVoidTask |> ignore
 
-                let collection = db.GetCollection<ObjectWithList> "objects"
-                let! fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
-                              |> Async.AwaitTask
-                let array = fromDb.List
-                Assert.Equal(2, array.Length)
-            } |> Async.StartImmediate
+            let collection = db.GetCollection<ObjectWithList> "objects"
+            let fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
+                            |> Async.AwaitTask |> Async.RunSynchronously
+            let array = fromDb.List
+            Assert.Equal(2, array.Length)
 
     [<Fact>]
     member this.``It can serialize records``() =
-        async {
-                let collection = db.GetCollection<RecordType> "objects"
-                let obj = { Id = BsonObjectId(ObjectId.GenerateNewId()); Name = "test"  }
-                do! collection.InsertOneAsync obj |> AwaitVoidTask
+            let collection = db.GetCollection<RecordType> "objects"
+            let obj = { Id = BsonObjectId(ObjectId.GenerateNewId()); Name = "test"  }
+            collection.InsertOneAsync obj |> AwaitVoidTask |> ignore
 
-                let genCollection = db.GetCollection "objects"
-                let! fromDb = collection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
-                                      |> Async.AwaitTask
-                Assert.Equal<string>("test", fromDb.Name)
-            } |> Async.RunSynchronously
+            let genCollection = db.GetCollection "objects"
+            let fromDb = collection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
+                                    |> Async.AwaitTask 
+                                    |> Async.RunSynchronously
+            Assert.Equal<string>("test", fromDb.Name)
 
     [<Fact>]
     member this.``It can deserialize records``() =
-        async {
-            let id = BsonObjectId(ObjectId.GenerateNewId())
-            let document = BsonDocument([BsonElement("_id", id); BsonElement("Name", BsonString("value"))])
-            let collection = db.GetCollection "objects"
-            do! collection.InsertOneAsync(document) |> AwaitVoidTask
+        let id = BsonObjectId(ObjectId.GenerateNewId())
+        let document = BsonDocument([BsonElement("_id", id); BsonElement("Name", BsonString("value"))])
+        let collection = db.GetCollection "objects"
+        collection.InsertOneAsync(document) |> AwaitVoidTask |> ignore
 
-            let collection = db.GetCollection<RecordType>("objects")
-            let! fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
-                                      |> Async.AwaitTask
-            Assert.NotNull(fromDb)
-            Assert.Equal<string>("value", fromDb.Name)
-        }|> Async.RunSynchronously
+        let collection = db.GetCollection<RecordType>("objects")
+        let fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
+                                    |> Async.AwaitTask 
+                                    |> Async.RunSynchronously
+        Assert.NotNull(fromDb)
+        Assert.Equal<string>("value", fromDb.Name)
 
     [<Fact>]
     member this.``It can serialize and deserialize nested records``() =
-        async {
-            let collection = db.GetCollection<Person> "persons"
-            let obj = { Id = BsonObjectId(ObjectId.GenerateNewId()); 
-                        PersonName = "test"; 
-                        Age = 33; 
-                        Childs = [{ChildName = "Adrian";
-                        Age = 3}] }
-            do! collection.InsertOneAsync obj |> AwaitVoidTask
+        let collection = db.GetCollection<Person> "persons"
+        let obj = { Id = BsonObjectId(ObjectId.GenerateNewId()); 
+                    PersonName = "test"; 
+                    Age = 33; 
+                    Childs = [{ChildName = "Adrian";
+                    Age = 3}] }
+        collection.InsertOneAsync obj |> AwaitVoidTask |> ignore
 
-            let genCollection = db.GetCollection<Person> "persons"
-            let! person = genCollection.Find(fun x -> x.Id = obj.Id).FirstAsync()  
-                            |> Async.AwaitTask
+        let genCollection = db.GetCollection<Person> "persons"
+        let person = genCollection.Find(fun x -> x.Id = obj.Id).FirstAsync()  
+                        |> Async.AwaitTask
+                        |> Async.RunSynchronously
 
-            Assert.NotNull person
-            Assert.Equal<string>("test",person.PersonName)
-            Assert.Equal<int>(33,person.Age)
-            Assert.Equal<int>(1 ,person.Childs |> Seq.length)
+        Assert.NotNull person
+        Assert.Equal<string>("test",person.PersonName)
+        Assert.Equal<int>(33,person.Age)
+        Assert.Equal<int>(1 ,person.Childs |> Seq.length)
 
-            let child = person.Childs |> Seq.head
+        let child = person.Childs |> Seq.head
 
-            Assert.Equal<string>("Adrian", child.ChildName)
-            Assert.Equal<int>(3, child.Age)
-        }|> Async.RunSynchronously
+        Assert.Equal<string>("Adrian", child.ChildName)
+        Assert.Equal<int>(3, child.Age) 
 
 
     [<Fact>]
     member this.``It can serialize option types``() =
-        async {
-            let collection = db.GetCollection<ObjectWithOptions> "objects"
-            let obj = ObjectWithOptions()
-            obj.Age <- Some 42
-            do! collection.InsertOneAsync obj |> AwaitVoidTask
+        let collection = db.GetCollection<ObjectWithOptions> "objects"
+        let obj = ObjectWithOptions()
+        obj.Age <- Some 42
+        collection.InsertOneAsync obj 
+            |> AwaitVoidTask
+            |> ignore
 
-            let collection = db.GetCollection "objects"
-            let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
-                                                                |> (fun d -> d.Add("_id",obj.Id)))
-            let! fromDb = collection.Find<BsonDocument>(filter).FirstAsync() 
-                                                        |> Async.AwaitTask
-            let age = fromDb.GetElement("Age")
-            Assert.NotNull(age);
-            Assert.Equal<string>("Some", age.Value.ToBsonDocument().GetElement("_t").Value.AsString)
-            let value = age.Value.AsBsonDocument.GetElement("_v").Value
-            Assert.True(value.IsBsonArray)
-            let array = value.AsBsonArray
-            Assert.Equal(1, array.Count)
-            Assert.Equal(42, array.[0].AsInt32)
-        } |> Async.RunSynchronously
+        let collection = db.GetCollection "objects"
+        let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
+                                                            |> (fun d -> d.Add("_id",obj.Id)))
+        let fromDb = collection.Find<BsonDocument>(filter).FirstAsync() 
+                                                    |> Async.AwaitTask
+                                                    |> Async.RunSynchronously
+        let age = fromDb.GetElement("Age")
+        Assert.NotNull(age);
+        Assert.Equal<string>("Some", age.Value.ToBsonDocument().GetElement("_t").Value.AsString)
+        let value = age.Value.AsBsonDocument.GetElement("_v").Value
+        Assert.True(value.IsBsonArray)
+        let array = value.AsBsonArray
+        Assert.Equal(1, array.Count)
+        Assert.Equal(42, array.[0].AsInt32)
 
     [<Fact>]
     member this.``It can serialize DimmerSwitch types``() =
-        async {
-            let collection = db.GetCollection<ObjectWithOptions> "objects"
-            let obj = ObjectWithDimmer()
-            obj.Switch <- DimMarquee(42, "loser") 
-            do! db.GetCollection<ObjectWithDimmer>("objects").InsertOneAsync (obj) |> AwaitVoidTask
+        let collection = db.GetCollection<ObjectWithOptions> "objects"
+        let obj = ObjectWithDimmer()
+        obj.Switch <- DimMarquee(42, "loser") 
+        db.GetCollection<ObjectWithDimmer>("objects").InsertOneAsync (obj)
+                |> AwaitVoidTask
+                |> ignore
 
-            let collection = db.GetCollection<BsonDocument> "objects"
+        let collection = db.GetCollection<BsonDocument> "objects"
             
-            let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
-                                                                |> (fun d -> d.Add("_id",obj.Id)))
-            let! fromDb = collection.Find(filter).FirstAsync()
-                                                        |> Async.AwaitTask
-            let switch = fromDb.GetElement("Switch")
-            Assert.NotNull(switch);
-            Assert.Equal<string>("DimMarquee", switch.Value.AsBsonDocument.GetElement("_t").Value.AsString)
-            let value = switch.Value.AsBsonDocument.GetElement("_v").Value
-            Assert.True(value.IsBsonArray)
-            let array = value.AsBsonArray
-            Assert.Equal(2, array.Count)
-            Assert.Equal(42, array.[0].AsInt32)
-            Assert.Equal<string>("loser", array.[1].AsString)
-        } |> Async.RunSynchronously
+        let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
+                                                            |> (fun d -> d.Add("_id",obj.Id)))
+        let fromDb = collection.Find(filter).FirstAsync()
+                                                    |> Async.AwaitTask
+                                                    |> Async.RunSynchronously
+        let switch = fromDb.GetElement("Switch")
+        Assert.NotNull(switch);
+        Assert.Equal<string>("DimMarquee", switch.Value.AsBsonDocument.GetElement("_t").Value.AsString)
+        let value = switch.Value.AsBsonDocument.GetElement("_v").Value
+        Assert.True(value.IsBsonArray)
+        let array = value.AsBsonArray
+        Assert.Equal(2, array.Count)
+        Assert.Equal(42, array.[0].AsInt32)
+        Assert.Equal<string>("loser", array.[1].AsString)
 
     [<Fact>]
     member this.``It can deserialize option types``() =
-        async {
             let id = BsonObjectId(ObjectId.GenerateNewId())
             let arrayPart = BsonArray([ BsonInt32(42) ])
        
             let structure = BsonDocument([| BsonElement("_t", BsonString("Some")); BsonElement("_v", arrayPart) |].AsEnumerable())
             let document = BsonDocument([|BsonElement("_id", id); BsonElement("Age", structure)|].AsEnumerable())
             let collection = db.GetCollection "objects"
-            do! collection.InsertOneAsync(document) |> AwaitVoidTask
+            collection.InsertOneAsync(document) 
+                |> AwaitVoidTask
+                |> ignore
 
             let collection = db.GetCollection<ObjectWithOptions> "objects"
-            let! fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
+            let fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
                                                         |> Async.AwaitTask
+                                                        |> Async.RunSynchronously
             match fromDb.Age with
             | Some 42 -> ()
             | _ -> fail "expected Some 42 but got something else"
-        } |> Async.RunSynchronously
 
     [<Fact>]
     member this.``We can integrate serialize & deserialize on DimmerSwitches``() =
-        async {
             let collection = db.GetCollection<ObjectWithDimmers> "objects"
             let obj = ObjectWithDimmers()
             obj.Kitchen <- Off
             obj.Bedroom1 <- Dim 42
             obj.Bedroom2 <- DimMarquee(12, "when I was little...")
-            do! collection.InsertOneAsync obj |> AwaitVoidTask
+            collection.InsertOneAsync obj 
+                |> AwaitVoidTask
+                |> ignore
 
-            let! fromDb = collection.Find(fun x -> x.Id = obj.Id).FirstAsync() |> Async.AwaitTask
+            let fromDb = collection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
+                        |> Async.AwaitTask
+                        |> Async.RunSynchronously
             match fromDb.Kitchen with
             | Off -> ()
             | _ -> fail "Kitchen light wasn't off"
@@ -242,4 +241,3 @@ type ``When serializing lists``() =
             match fromDb.Bedroom2 with
             | DimMarquee(12, "when I was little...") -> ()
             | _ -> fail "Bedroom2 doesn't have the party we thought"
-          } |> Async.RunSynchronously

@@ -5,7 +5,7 @@
     <version>0.2.0</version>
     <title>MongoDB.Driver.FSharp</title>
     <authors>Sebastian Faltoni, Tim Kellogg</authors>
-    <owners>Sebastian Faltoni</owners>
+    <owners>Tim Kellogg</owners>
     <licenseUrl>https://github.com/nukedbit/MongoDB.FSharp/blob/master/License.txt</licenseUrl>
     <projectUrl>https://github.com/nukedbit/MongoDB.FSharp</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>

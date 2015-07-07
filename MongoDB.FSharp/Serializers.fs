@@ -66,7 +66,6 @@ module Serializers =
                 context.Writer.WriteStartArray()
                 context.Writer.WriteEndArray()
             else
-                let actualType = value.GetType()
                 //this.VerifyTypes(nominalType, actualType, typeof<list<'T>>)
 
                 let lst = box value :?> list<'T>
