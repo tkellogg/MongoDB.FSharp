@@ -72,7 +72,7 @@ type ``When serializing lists``() =
             let collection = db.GetCollection<ObjectWithList> "objects"
             let obj = ObjectWithList()
             obj.List <- [ "hello"; "world" ]
-            collection.InsertOneAsync obj |> AwaitVoidTask |> ignore
+            collection.InsertOneAsync obj |> AwaitVoidTask |> Async.RunSynchronously
 
             let genCollection = db.GetCollection<ObjectWithList> "objects"
             let fromDb = genCollection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
@@ -86,7 +86,7 @@ type ``When serializing lists``() =
             let id = BsonObjectId(ObjectId.GenerateNewId())
             let document = BsonDocument([ BsonElement("_id", id); BsonElement("List", list) ])
             let collection = db.GetCollection "objects"
-            collection.InsertOneAsync document |> AwaitVoidTask |> ignore
+            collection.InsertOneAsync document |> AwaitVoidTask |> Async.RunSynchronously
 
             let collection = db.GetCollection<ObjectWithList> "objects"
             let fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
@@ -111,7 +111,7 @@ type ``When serializing lists``() =
         let id = BsonObjectId(ObjectId.GenerateNewId())
         let document = BsonDocument([BsonElement("_id", id); BsonElement("Name", BsonString("value"))])
         let collection = db.GetCollection "objects"
-        collection.InsertOneAsync(document) |> AwaitVoidTask |> ignore
+        collection.InsertOneAsync(document) |> AwaitVoidTask |> Async.RunSynchronously
 
         let collection = db.GetCollection<RecordType>("objects")
         let fromDb = collection.Find(fun x -> x.Id = id).FirstAsync() 
@@ -128,7 +128,7 @@ type ``When serializing lists``() =
                     Age = 33; 
                     Childs = [{ChildName = "Adrian";
                     Age = 3}] }
-        collection.InsertOneAsync obj |> AwaitVoidTask |> ignore
+        collection.InsertOneAsync obj |> AwaitVoidTask |> Async.RunSynchronously
 
         let genCollection = db.GetCollection<Person> "persons"
         let person = genCollection.Find(fun x -> x.Id = obj.Id).FirstAsync()  
@@ -153,7 +153,7 @@ type ``When serializing lists``() =
         obj.Age <- Some 42
         collection.InsertOneAsync obj 
             |> AwaitVoidTask
-            |> ignore
+            |> Async.RunSynchronously
 
         let collection = db.GetCollection "objects"
         let filter = new BsonDocumentFilterDefinition<_>(new BsonDocument() 
@@ -172,12 +172,11 @@ type ``When serializing lists``() =
 
     [<Fact>]
     member this.``It can serialize DimmerSwitch types``() =
-        let collection = db.GetCollection<ObjectWithOptions> "objects"
         let obj = ObjectWithDimmer()
         obj.Switch <- DimMarquee(42, "loser") 
         db.GetCollection<ObjectWithDimmer>("objects").InsertOneAsync (obj)
                 |> AwaitVoidTask
-                |> ignore
+                |> Async.RunSynchronously
 
         let collection = db.GetCollection<BsonDocument> "objects"
             
@@ -199,8 +198,7 @@ type ``When serializing lists``() =
     [<Fact>]
     member this.``It can deserialize option types``() =
             let id = BsonObjectId(ObjectId.GenerateNewId())
-            let arrayPart = BsonArray([ BsonInt32(42) ])
-       
+            let arrayPart = BsonArray([ BsonInt32(42) ])       
             let structure = BsonDocument([| BsonElement("_t", BsonString("Some")); BsonElement("_v", arrayPart) |].AsEnumerable())
             let document = BsonDocument([|BsonElement("_id", id); BsonElement("Age", structure)|].AsEnumerable())
             let collection = db.GetCollection "objects"

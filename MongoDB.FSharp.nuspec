@@ -13,7 +13,7 @@
     <releaseNotes>Initial release, should work but not recommended for production</releaseNotes>
     <copyright>Copyright 2015</copyright>
     <dependencies>
-      <dependency id="MongoDB.Driver" version="" />
+      <dependency id="MongoDB.Driver" version="2.0.1" />
     </dependencies>
     <tags>f# fsharp mongodB nosql utility</tags>
   </metadata>
