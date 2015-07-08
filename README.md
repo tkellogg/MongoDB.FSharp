@@ -10,12 +10,7 @@ Installation
 Note also that this requires at least version 1.8.1 of the official MongoDB driver. That
 version includes some API that makes this whole project possible.
 
-Install NuGet and run this from the Package Manager Console. The F# driver builds on top of 
-the officiel C# driver so first you need to install the C# driver
-
-    PM> Install-Package mongocsharpdriver
-
-and then you install the F# driver
+Install NuGet and run this from the Package Manager Console. 
 
     PM> Install-Package MongoDB.FSharp
 

@@ -12,7 +12,10 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Silent utilities to make the official MongoDB driver feel natural to work with in F#</description>
     <releaseNotes>Initial release, should work but not recommended for production</releaseNotes>
-    <copyright>Copyright 2013</copyright>
+    <copyright>Copyright 2013-2015</copyright>
     <tags>f# fsharp mongodB nosql utility</tags>
+    <dependencies>
+      <dependency id="MongoDB.Driver" version="2.0.1" />
+    </dependencies>
   </metadata>
 </package>
