@@ -8,7 +8,7 @@ open TestUtils
 
 type ``When registering classes``() =
 
-    let stubbed = getClassMap (fun t -> false)
+    let stubbed = MongoDB.FSharp.Serializers.getClassMap (fun t -> false)
     
     [<Fact>]
     member this.``It sets serialization options``() =
