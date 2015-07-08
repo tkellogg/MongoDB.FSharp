@@ -61,8 +61,6 @@
     <None Include="Script.fsx" />
     <Compile Include="Serializers.fs" />
     <Content Include="packages.config" />
-    <Compile Include="Helpers.fs" />
-    <Compile Include="Extensions.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="MongoDB.Bson">

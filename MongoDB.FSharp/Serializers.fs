@@ -1,4 +1,4 @@
-﻿namespace MongoDB.FSharp
+﻿module MongoDB.FSharp
 
 open System
 open System.Reflection
@@ -9,6 +9,7 @@ open MongoDB.Bson.Serialization
 open MongoDB.Bson.Serialization.Options
 open MongoDB.Bson.Serialization.Serializers
 open MongoDB.Bson.Serialization.Conventions
+open MongoDB.Driver
 
 module Seq =
     let tryHead s =
@@ -28,11 +29,11 @@ module Serializers =
         override this.Deserialize(context : BsonDeserializationContext, args : BsonDeserializationArgs) =
             let reader = context.Reader
             let readArray() =
-                let itemArgs = BsonDeserializationArgs(NominalType = typeof<'T>)                
+                let itemArgs = BsonDeserializationArgs(NominalType = typeof<'T>)
                 seq {
                     reader.ReadStartArray()
                     let convention = BsonSerializer.LookupDiscriminatorConvention(typeof<'T>)
-                    while reader.ReadBsonType() <> BsonType.EndOfDocument do                        
+                    while reader.ReadBsonType() <> BsonType.EndOfDocument do
                         let element = itemSerializer.Deserialize(context, itemArgs)
                         yield element :?> 'T
                     reader.ReadEndArray()
@@ -278,3 +279,38 @@ module Serializers =
             BsonSerializer.RegisterSerializationProvider(FsharpSerializationProvider())
             BsonSerializer.RegisterGenericSerializerDefinition(typeof<list<_>>, typeof<ListSerializer<_>>)
             isRegistered <- true
+
+
+
+let findOne (collection : IMongoCollection<_>) (filter : FilterDefinition<_>) = 
+    async {
+      let! list = 
+        filter
+        |> collection.Find
+        |> fun x -> x.ToListAsync()
+        |> Async.AwaitTask
+
+      return list |> Seq.head
+    }
+
+let findOneById (collection : IMongoCollection<_>) id = 
+  let options = FindOptions()
+  options.BatchSize <- Nullable(1)      
+
+  async {
+    let! list = 
+      Builders<'T>.Filter.Eq(StringFieldDefinition<'T, 'TField>("_id"), id)
+      |> fun x -> collection.Find (x, options)
+      |> fun x -> x.ToListAsync()
+      |> Async.AwaitTask
+
+    return list |> Seq.head
+  }
+
+let insertOne (collection : IMongoCollection<_>) doc = 
+  async {        
+      return! doc
+      |> collection.InsertOneAsync  
+      |> Async.AwaitIAsyncResult 
+      |> Async.Ignore
+  }

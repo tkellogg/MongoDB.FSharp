@@ -62,22 +62,13 @@ type ``When serializing lists``() =
 
     let newObjectId () = BsonObjectId(ObjectId.GenerateNewId())
 
-    member this.insertOne<'T> name doc = 
-      async {
-          let collection = db.GetCollection<'T> name
-          do! collection.InsertOne doc 
-      }
-
-    member this.insertOnePerson<'T> doc =
-      this.insertOne<'T> "persons" doc
-
-    member this.insertOneObject<'T> doc =
-      this.insertOne<'T> "objects" doc
+    let insertOnePerson = insertOne (db.GetCollection "persons")
+    let insertOneObject (o : 'T)  = insertOne (db.GetCollection "objects") o
 
     member this.findOne<'T> name id = 
       async {
         let collection = db.GetCollection<'T> name
-        let! fromDb = collection.FindOneById id
+        let! fromDb = findOneById collection id
         return fromDb
       }
 
@@ -100,7 +91,7 @@ type ``When serializing lists``() =
         async {
           let obj = ObjectWithList()
           obj.List <- [ "hello"; "world" ]
-          do! this.insertOneObject obj
+          do! insertOneObject obj
           
           let! fromDb = this.findOneObject<BsonDocument> obj.Id
           let array = fromDb.["List"].AsBsonArray
@@ -113,7 +104,7 @@ type ``When serializing lists``() =
           let list = BsonArray([ "hello"; "world" ])
           let id = newObjectId()
           let document = BsonDocument([ BsonElement("_id", id); BsonElement("List", list) ])
-          do! this.insertOneObject document
+          do! insertOneObject document
 
           let! fromDb = this.findOneObject<ObjectWithList> id
           
@@ -125,7 +116,7 @@ type ``When serializing lists``() =
     member this.``It can serialize records``() =
         async {
           let obj = { Id = newObjectId(); Name = "test"  }
-          do! this.insertOneObject obj
+          do! insertOneObject obj
 
           let! fromDb = this.findOneObject<BsonDocument> obj.Id
           let test = fromDb.["Name"].AsString
@@ -137,7 +128,7 @@ type ``When serializing lists``() =
         async {
           let id = newObjectId()
           let document = BsonDocument([BsonElement("_id", id); BsonElement("Name", BsonString("value"))])
-          do! this.insertOneObject document
+          do! insertOneObject document
 
           let! fromDb = this.findOneObject<RecordType> id
           Assert.NotNull(fromDb)
@@ -149,7 +140,7 @@ type ``When serializing lists``() =
         async {
           let collection = db.GetCollection<Person> "persons"
           let obj = { Id = newObjectId(); PersonName = "test"; Age = 33; Childs = [{ChildName = "Adrian"; Age = 3}] }
-          do! this.insertOnePerson obj
+          do! insertOnePerson obj
 
           let! person = this.findOnePerson obj.Id
 
@@ -171,7 +162,7 @@ type ``When serializing lists``() =
         let obj = ObjectWithOptions()
         obj.Age <- Some 42
         
-        do! this.insertOneObject obj
+        do! insertOneObject obj
         
         let! fromDb = this.findOneObject<BsonDocument> obj.Id
 
@@ -191,7 +182,7 @@ type ``When serializing lists``() =
           let obj = ObjectWithDimmer()
           obj.Switch <- DimMarquee(42, "loser")
 
-          do! this.insertOneObject obj
+          do! insertOneObject obj
 
           let! fromDb = this.findOne<BsonDocument> "objects" obj.Id
 
@@ -214,7 +205,7 @@ type ``When serializing lists``() =
         let structure = BsonDocument([BsonElement("_t", BsonString("Some")); BsonElement("_v", arrayPart)])
         let document = BsonDocument([BsonElement("_id", id); BsonElement("Age", structure)])
 
-        do! this.insertOneObject document
+        do! insertOneObject document
         
         let! fromDb = this.findOneObject<ObjectWithOptions> id
         match fromDb.Age with
@@ -230,7 +221,7 @@ type ``When serializing lists``() =
         obj.Bedroom1 <- Dim 42
         obj.Bedroom2 <- DimMarquee(12, "when I was little...")
 
-        do! this.insertOneObject obj
+        do! insertOneObject obj
         
 
         let! fromDb = this.findOneObject<ObjectWithDimmers> obj.Id
