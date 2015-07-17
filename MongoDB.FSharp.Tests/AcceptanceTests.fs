@@ -100,7 +100,6 @@ type ``When serializing lists``() =
             let obj = { Id = BsonObjectId(ObjectId.GenerateNewId()); Name = "test"  }
             collection.InsertOneAsync obj |> AwaitVoidTask |> ignore
 
-            let genCollection = db.GetCollection "objects"
             let fromDb = collection.Find(fun x -> x.Id = obj.Id).FirstAsync() 
                                     |> Async.AwaitTask 
                                     |> Async.RunSynchronously
