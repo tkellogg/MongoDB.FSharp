@@ -1,6 +1,9 @@
 source https://api.nuget.org/v3/index.json
 
 nuget FSharp.Core
+nuget Microsoft.NET.Test.Sdk
+nuget Mongo2Go
 nuget MongoDb.Driver
 nuget unquote
 nuget xunit
+nuget xunit.runner.visualstudio
