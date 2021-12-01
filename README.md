@@ -50,7 +50,7 @@ let collection = db.GetCollection<Person> "people"
 let id = BsonObjectId(ObjectId.GenerateNewId())
 collection.Insert { Id = id; Name = "George"; Scores = [13; 52; 6] }
 
-let george = collection.FindOne(Query.EQ("_id", id))
+let george = collection.Find(fun person -> person.Id = id)
 ```
 
 The example above would work naturally in C#, but remember that record
