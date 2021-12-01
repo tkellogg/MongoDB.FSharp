@@ -58,16 +58,11 @@ type ObjectWithDimmers() =
 type ``When serializing lists``() =
     let runner = MongoDbRunner.Start()
     let db = MongoClient(runner.ConnectionString).GetDatabase("IntegrationTest")
-    do
-        Serializers.Register()
+    do Serializers.Register()
 
     interface System.IDisposable with
-        member this.Dispose() =
-            db.DropCollection "objects"
-            db.DropCollection "persons"
-            runner.Dispose()
+        member this.Dispose() = runner.Dispose()
 
-    /// Seems to be fixed in version 1.5 of the C# driver
     [<Fact>]
     member this.``It can serialize an object with a list``() =
         let collection = db.GetCollection<ObjectWithList> "objects"
@@ -79,31 +74,33 @@ type ``When serializing lists``() =
         let fromDb = genCollection.Find(fun x -> x.Id = obj.Id).ToList().First()
         let array = fromDb.List
         test <@ List.length array = 2 @>
-       (*
+        
     [<Fact>]
     member this.``It can deserialze lists``() =
         let list = BsonArray([ "hello"; "world" ])
-        let id = BsonObjectId.GenerateNewId()
+        let id = BsonObjectId(ObjectId.GenerateNewId())
         let document = BsonDocument([ BsonElement("_id", id); BsonElement("List", list) ])
-        let collection = db.GetCollection "objects"
+        let collection = db.GetCollection<BsonDocument> "objects"
         collection.InsertOne document
 
         let collection = db.GetCollection<ObjectWithList> "objects"
-        let fromDb = collection.FindOne(new QueryDocument("_id", id))
+        let fromDb = collection.Find(fun x -> x.Id = id).ToList().First()
         let array = fromDb.List
-        Assert.Equal(2, array.Length)
+        test <@ List.length array = 2 @>
 
     [<Fact>]
     member this.``It can serialize records``() =
         let collection = db.GetCollection<RecordType> "objects"
-        let obj = { Id = BsonObjectId.GenerateNewId(); Name = "test"  }
+        let obj = { Id = BsonObjectId(ObjectId.GenerateNewId()); Name = "test"  }
         collection.InsertOne obj
 
-        let genCollection = db.GetCollection "objects"
-        let fromDb = genCollection.FindOne(new QueryDocument("_id", obj.Id))
-        let test = fromDb["Name"].AsString
-        Assert.Equal<string>("test", test)
+        let genCollection = db.GetCollection<BsonDocument> "objects"
+        let filter = FilterDefinition<BsonDocument>.op_Implicit(BsonDocument("_id", obj.Id))
+        let fromDb = genCollection.Find(filter).ToList().First()
+        let name = fromDb["Name"].AsString
+        test <@ name = "test" @>
 
+       (*
     [<Fact>]
     member this.``It can deserialize records``() =
         let id = BsonObjectId.GenerateNewId()

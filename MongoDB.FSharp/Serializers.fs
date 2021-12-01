@@ -125,17 +125,24 @@ module Serializers =
             Some map
         | None -> 
             None
+            
+    let createClassMapSerializer (type': Type) (classMap: BsonClassMap) =
+        let concreteType = type'.MakeGenericType(classMap.ClassType)
+        let ctor = concreteType.GetConstructor([| typeof<BsonClassMap> |])
+        ctor.Invoke([| classMap |]) :?> IBsonSerializer
 
-    type RecordSerializer(classMap : BsonClassMap) =
-        let classMapSerializer = BsonClassMapSerializer(classMap)
+    type RecordSerializerBase(classMap : BsonClassMap) =
+        let classMapSerializer = classMap |> createClassMapSerializer typedefof<BsonClassMapSerializer<_>>
 
         let getter = 
             match classMap.IdMemberMap with
             | null -> None
             | mm -> Some(mm.Getter)
 
-        let idProvider = classMapSerializer :> IBsonIdProvider
+        let idProvider = classMapSerializer :?> IBsonIdProvider
 
+        member val _ClassMapSerializer = classMapSerializer
+        
         interface IBsonSerializer with
             member _.ValueType = classMap.ClassType
             
@@ -164,7 +171,18 @@ module Serializers =
 
             member this.SetDocumentId(document : Object, id : Object) = idProvider.SetDocumentId(document, id)
 
+    type RecordSerializer<'T>(classMap : BsonClassMap) =
+        inherit RecordSerializerBase(classMap)
+        
+        do assert (typeof<'T> = classMap.ClassType)
+        
+        member private my.Serializer = my._ClassMapSerializer :?> IBsonSerializer<'T>
 
+        interface IBsonSerializer<'T> with
+            member my.Serialize(context: BsonSerializationContext, args: BsonSerializationArgs, value: 'T) =
+                my.Serializer.Serialize(context, args, value)
+            member my.Deserialize(context, args) = my.Serializer.Deserialize(context, args)
+    
     type UnionCaseSerializer(original) =
 
         let readItems context args (types : Type seq) =
@@ -214,7 +232,7 @@ module Serializers =
                 match fsharpType typ with
                 | Some SourceConstructFlags.RecordType ->
                     match ensureClassMapRegistered typ with
-                    | Some classMap -> RecordSerializer(classMap) :> IBsonSerializer
+                    | Some classMap -> classMap |> createClassMapSerializer typedefof<RecordSerializer<_>>
                     // return null means to try the next provider to see if it has a better answer
                     | None -> null
 
