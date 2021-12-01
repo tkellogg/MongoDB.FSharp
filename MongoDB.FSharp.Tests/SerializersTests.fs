@@ -8,11 +8,11 @@ open TestUtils
 
 type ``When registering classes``() =
 
-    let stubbed = getClassMap (fun t -> false)
+    let stubbed = getClassMap (fun _ -> false)
     
     [<Fact>]
     member this.``It sets serialization options``() =
         let classMap = stubbed typeof<List<string>>
         match classMap with
-        | Some cm -> ()
+        | Some _ -> ()
         | None -> fail "expected a classmap"
