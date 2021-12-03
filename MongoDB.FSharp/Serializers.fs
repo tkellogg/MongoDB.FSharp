@@ -1,7 +1,6 @@
 ﻿namespace MongoDB.FSharp
 
 open System
-open System.Reflection
 open Microsoft.FSharp.Reflection
 open MongoDB.Bson
 open MongoDB.Bson.IO
@@ -9,11 +8,6 @@ open MongoDB.Bson.Serialization
 open MongoDB.Bson.Serialization.Serializers
 
 module Serializers =
-
-    type IBsonWriter with
-        member inline this.WriteEmptyArray() =
-            this.WriteStartArray()
-            this.WriteEndArray()
 
     type MongoOptionSerializer<'T>() =
         inherit SerializerBase<'T option>()
@@ -114,58 +108,6 @@ module Serializers =
         |> Seq.map(fun t -> t.SourceConstructFlags)
         |> Seq.tryHead
 
-    let getClassMap isClassMapRegistered (actualType : Type) =
-        let rec getMember (_type : Type) name other =
-            let memberInfos = _type.GetMember name
-            if not (memberInfos |> Seq.isEmpty) then
-                Some(Seq.head memberInfos)
-            elif other <> null then
-                getMember _type other null
-            else
-                None
-
-        if not (isClassMapRegistered actualType) then
-            let genericType = typedefof<BsonClassMap<_>>.MakeGenericType(actualType)
-            let classMap = Activator.CreateInstance(genericType) :?> BsonClassMap
-
-            classMap.AutoMap()
-
-            // TODO: don't just map properties -> anything public, maybe consider using C#'s conventions to some extent
-            actualType.GetProperties() 
-            |> Seq.where (fun prop -> 
-                classMap.AllMemberMaps |> Seq.exists (fun mm -> mm.MemberInfo = (prop :> MemberInfo)) |> not
-            )
-            |> Seq.where (fun prop -> prop.GetGetMethod() <> null)
-            |> Seq.iter (fun prop -> classMap.MapMember(prop :> MemberInfo) |> ignore )
-
-            // TODO: use conventions
-            match getMember actualType "Id" "_id" with
-            | Some memberInfo -> classMap.MapIdMember memberInfo |> ignore
-            | None -> ()
-
-            match fsharpType actualType with 
-            | Some SourceConstructFlags.RecordType -> 
-                // Map creator function. Requires Mongo >1.8
-                match actualType.GetConstructors() |> Seq.sortBy (fun c -> c.GetParameters().Length) |> Seq.tryHead with
-                | Some c -> 
-                    let parms = classMap.DeclaredMemberMaps |> Seq.map (fun m -> m.ElementName) |> Array.ofSeq
-                    classMap.MapConstructor (c, parms) |> ignore
-                | None -> ()
-            | _ -> ()
-
-            classMap.Freeze() |> Some
-        else 
-            None
-
-    let ensureClassMapRegistered actualType =
-        let fn = BsonClassMap.IsClassMapRegistered 
-        match getClassMap fn actualType with
-        | Some map -> 
-            map |> BsonClassMap.RegisterClassMap
-            Some map
-        | None -> 
-            None
-            
     let createClassMapSerializer (type': Type) (classMap: BsonClassMap) =
         let concreteType = type'.MakeGenericType(classMap.ClassType)
         let ctor = concreteType.GetConstructor([| typeof<BsonClassMap> |])
@@ -273,8 +215,6 @@ module Serializers =
     let inline private createInstance<'T> typ = Activator.CreateInstance(typ) :?> 'T
     let inline private makeGenericType<'T> typ = typedefof<'T>.MakeGenericType typ
         
-    let classMapSerializer = ensureClassMapRegistered >> Option.map (createClassMapSerializer typedefof<RecordSerializer<_>>)
-    
     let specificSerializer<'nominal,'serializer> =
         getGenericArgumentOf typedefof<'nominal> >> Option.map (makeGenericType<'serializer> >> createInstance<IBsonSerializer>)
     let listSerializer typ = typ |> specificSerializer<List<_>, ListSerializer<_>>
@@ -285,11 +225,9 @@ module Serializers =
     type FsharpSerializationProvider(useOptionNull) =
         let serializers =
           seq {
-              yield SourceConstructFlags.RecordType, classMapSerializer
               yield SourceConstructFlags.SumType, listSerializer
               if useOptionNull then yield SourceConstructFlags.SumType, simplisticOptionSerializer
               yield SourceConstructFlags.SumType, unionCaseSerializer
-              yield SourceConstructFlags.UnionCase, unionCaseSerializer
           } |> List.ofSeq
 
         interface IBsonSerializationProvider with

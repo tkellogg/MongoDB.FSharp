@@ -1,6 +1,6 @@
 type project
 id MongoDB.FSharp2
-version 1.0.0
+version 1.0.1
 authors Tim Kellogg, Ruxo Zheng
 owners Tim Kellogg, Ruxo Zheng
 licenseUrl https://github.com/ruxo/MongoDB.FSharp/blob/master/License.txt

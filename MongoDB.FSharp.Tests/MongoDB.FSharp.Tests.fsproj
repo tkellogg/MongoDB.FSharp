@@ -13,7 +13,6 @@
     <Compile Include="TestUtils.fs" />
     <Compile Include="TestTypes.fs" />
     <Compile Include="AcceptanceTests.fs" />
-    <Compile Include="SerializersTests.fs" />
     <Content Include="app.config" />
     <Content Include="paket.references" />
   </ItemGroup>
