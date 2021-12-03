@@ -1,0 +1,12 @@
+type project
+id MongoDB.FSharp2
+version 1.0.0
+authors Tim Kellogg, Ruxo Zheng
+owners Tim Kellogg, Ruxo Zheng
+licenseUrl https://github.com/ruxo/MongoDB.FSharp/blob/master/License.txt
+projectUrl https://github.com/ruxo/MongoDB.FSharp
+description
+    F# serializers for MongoDB 2.x.
+    Silent utilities to make the official MongoDB driver feel natural to work with in F#
+requireLicenseAcceptance false
+tags f# fsharp mongodb nosql utility
