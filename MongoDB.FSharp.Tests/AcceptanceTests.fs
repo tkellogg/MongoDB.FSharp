@@ -10,6 +10,7 @@ open MongoDB.FSharp
 open System.Linq
 
 open TestUtils
+open Xunit.Abstractions
 
 type ObjectWithList() =
     member val Id : BsonObjectId = newBsonObjectId() with get, set
@@ -37,10 +38,14 @@ type DimmerSwitch =
     | Dim of int
     | DimMarquee of int * string
     | On
-
-type ObjectWithOptions() =
-    member val Id : BsonObjectId = newBsonObjectId() with get, set
-    member val Age : int option = None with get, set
+    
+type RecordWithList = {
+    Id: BsonObjectId
+    IntVal: int
+    DoubleVal: double
+    ListVal: int list
+    OptionVal: int option
+}
 
 type ObjectWithDimmer() =
     member val Id : BsonObjectId = newBsonObjectId() with get, set
@@ -52,7 +57,7 @@ type ObjectWithDimmers() =
     member val Bedroom1 : DimmerSwitch = Off with get, set
     member val Bedroom2 : DimmerSwitch = Off with get, set
 
-type ``When serializing lists``() =
+type ``When serializing lists``(output: ITestOutputHelper) =
     let runner = MongoDbRunner.Start()
     let db = MongoClient(runner.ConnectionString).GetDatabase("IntegrationTest")
     do Serializers.Register()
@@ -133,24 +138,6 @@ type ``When serializing lists``() =
         Assert.Equal<int>(3, child.Age)
 
     [<Fact>]
-    member this.``It can serialize option types``() =
-        let collection = db.GetCollection<ObjectWithOptions> "objects"
-        let obj = ObjectWithOptions()
-        obj.Age <- Some 42
-        collection.InsertOne obj
-
-        let collection = db.GetCollection<BsonDocument> "objects"
-        let fromDb = collection |> findById obj.Id
-        let age = fromDb.GetElement("Age")
-        Assert.NotNull(age);
-        Assert.Equal<string>("Some", age.Value.AsBsonDocument.GetElement("_t").Value.AsString)
-        let value = age.Value.AsBsonDocument.GetElement("_v").Value
-        Assert.True(value.IsBsonArray)
-        let array = value.AsBsonArray
-        Assert.Equal(1, array.Count)
-        Assert.Equal(42, array.[0].AsInt32)
-
-    [<Fact>]
     member this.``It can serialize DimmerSwitch types``() =
         let collection = db.GetCollection<ObjectWithDimmer> "objects"
         let obj = ObjectWithDimmer()
@@ -168,6 +155,32 @@ type ``When serializing lists``() =
         Assert.Equal(2, array.Count)
         Assert.Equal(42, array.[0].AsInt32)
         Assert.Equal<string>("loser", array.[1].AsString)
+        
+    [<Fact>]
+    member this.``It can serialize option types``() =
+        let collection = db.GetCollection<ObjectWithOptions> "objects"
+        let obj = ObjectWithOptions()
+        obj.Age <- Some 42
+        collection.InsertOne obj
+
+        let collection = db.GetCollection<BsonDocument> "objects"
+        let fromDb = collection |> findById obj.Id
+        let age = fromDb.GetElement("Age")
+        let v = age.Value
+        test <@ v.AsInt32 = 42 @>
+
+    [<Fact>]
+    member this.``It can serialize option types with None``() =
+        let collection = db.GetCollection<ObjectWithOptions> "objects"
+        let obj = ObjectWithOptions()
+        obj.Age <- None
+        collection.InsertOne obj
+
+        let collection = db.GetCollection<BsonDocument> "objects"
+        let fromDb = collection |> findById obj.Id
+        let age = fromDb.GetElement("Age")
+        let v = age.Value
+        test <@ v.AsBsonNull = BsonNull.Value @>
 
     [<Fact>]
     member this.``It can deserialize option types``() =
@@ -183,6 +196,17 @@ type ``When serializing lists``() =
         match fromDb.Age with
         | Some 42 -> ()
         | _ -> fail "expected Some 42 but got something else"
+
+    [<Fact>]
+    member this.``It can deserialize option types from undefined``() =
+        let id = newBsonObjectId()
+        let document = BsonDocument([BsonElement("_id", id)])
+        let collection = db.GetCollection "objects"
+        collection.InsertOne(document)
+
+        let collection = db.GetCollection<ObjectWithOptions> "objects"
+        let fromDb = collection.Find(fun x -> x.Id = id).ToList().First()
+        test <@ fromDb.Age = None @>
 
     [<Fact>]
     member this.``We can integrate serialize & deserialize on DimmerSwitches``() =
@@ -205,3 +229,23 @@ type ``When serializing lists``() =
         match fromDb.Bedroom2 with
         | DimMarquee(12, "when I was little...") -> ()
         | _ -> fail "Bedroom2 doesn't have the party we thought"
+        
+    [<Fact>]
+    member _.``It can serialize record with list`` () =
+        let collection = db.GetCollection<RecordWithList> "objects"
+        let obj = {
+            Id = newBsonObjectId()
+            IntVal = 123
+            DoubleVal = 1.23
+            ListVal = [1;2;3]
+            OptionVal = Some 123
+        }
+        collection.InsertOne obj
+
+        let testCollection = db.GetCollection<BsonDocument> "objects"
+        output.WriteLine((testCollection |> findById obj.Id).ToJson())
+        
+        let fromDb = collection.Find(fun x -> x.Id = obj.Id).ToList().First()
+
+        test <@ obj = fromDb @>
+        

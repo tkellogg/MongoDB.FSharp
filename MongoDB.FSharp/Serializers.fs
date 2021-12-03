@@ -15,6 +15,46 @@ module Serializers =
             this.WriteStartArray()
             this.WriteEndArray()
 
+    type MongoOptionSerializer<'T>() =
+        inherit SerializerBase<'T option>()
+        
+        let contentSerializer = BsonSerializer.LookupSerializer(typeof<'T>)
+        
+        override my.Serialize(context, _, value) =
+            let writer = context.Writer
+            match value with
+            | Some v -> contentSerializer.Serialize(context, v)
+            | None -> writer.WriteNull()
+            ()
+
+        override my.Deserialize(context, _) =
+            let reader = context.Reader
+            let savePos = reader.GetBookmark()
+            let readDefined() =
+                if reader.CurrentBsonType = BsonType.Undefined
+                then None
+                else Some (contentSerializer.Deserialize(context) :?> 'T)
+                
+            match reader.CurrentBsonType with
+            | BsonType.Null ->
+                reader.ReadNull()
+                None
+            | BsonType.Document ->
+                reader.ReadStartDocument()
+                if reader.FindElement("_v") then
+                    reader.ReadStartArray()
+                    let result = readDefined()
+                    if result.IsNone then reader.ReadUndefined()
+                    reader.ReadEndArray()
+                    reader.ReadEndDocument()
+                    result
+                else
+                    if reader.CurrentBsonType = BsonType.EndOfDocument
+                    then reader.ReadEndDocument()
+                    else reader.ReturnToBookmark(savePos)
+                    None
+            | _ -> readDefined()
+            
     type ListSerializer<'T>() =
         inherit SerializerBase<list<'T>>()
 
@@ -224,37 +264,57 @@ module Serializers =
                 reader.ReadEndArray()
                 reader.ReadEndDocument()
                 FSharpValue.MakeUnion(unionType, items)
-
-    type FsharpSerializationProvider() =
+                
+    let private getGenericArgumentOf baseType (typ: Type) =
+        if typ.IsGenericType && typ.GetGenericTypeDefinition() = baseType
+        then Some <| typ.GetGenericArguments()
+        else None
+        
+    let inline private createInstance<'T> typ = Activator.CreateInstance(typ) :?> 'T
+    let inline private makeGenericType<'T> typ = typedefof<'T>.MakeGenericType typ
+        
+    let classMapSerializer = ensureClassMapRegistered >> Option.map (createClassMapSerializer typedefof<RecordSerializer<_>>)
+    
+    let specificSerializer<'nominal,'serializer> =
+        getGenericArgumentOf typedefof<'nominal> >> Option.map (makeGenericType<'serializer> >> createInstance<IBsonSerializer>)
+    let listSerializer typ = typ |> specificSerializer<List<_>, ListSerializer<_>>
+    let simplisticOptionSerializer typ = typ |> specificSerializer<Option<_>, MongoOptionSerializer<_>>
+    
+    let unionCaseSerializer typ = Some (typ |> UnionCaseSerializer :> IBsonSerializer)
+    
+    type FsharpSerializationProvider(useOptionNull) =
+        let serializers =
+          seq {
+              yield SourceConstructFlags.RecordType, classMapSerializer
+              yield SourceConstructFlags.SumType, listSerializer
+              if useOptionNull then yield SourceConstructFlags.SumType, simplisticOptionSerializer
+              yield SourceConstructFlags.SumType, unionCaseSerializer
+              yield SourceConstructFlags.UnionCase, unionCaseSerializer
+          } |> List.ofSeq
 
         interface IBsonSerializationProvider with
             member this.GetSerializer(typ : Type) =
                 match fsharpType typ with
-                | Some SourceConstructFlags.RecordType ->
-                    match ensureClassMapRegistered typ with
-                    | Some classMap -> classMap |> createClassMapSerializer typedefof<RecordSerializer<_>>
-                    // return null means to try the next provider to see if it has a better answer
-                    | None -> null
-
-                // other F# types, when we're ready (list, seq, discriminated union)
-                | Some SourceConstructFlags.SumType ->
-                    // Maybe it's a list?
-                    if typ.IsGenericType && typ.GetGenericTypeDefinition() = typedefof<List<_>> then
-                         typedefof<ListSerializer<_>>.MakeGenericType(typ.GetGenericArguments())
-                         |> Activator.CreateInstance :?> IBsonSerializer
-                    elif FSharpType.IsUnion typ then
-                        UnionCaseSerializer(typ) :> IBsonSerializer
-                    else
-                        null
-
-                | Some SourceConstructFlags.UnionCase -> UnionCaseSerializer(typ) :> IBsonSerializer
-                | _ -> null
+                | Some flag ->
+                    serializers |> Seq.filter (fst >> (=) flag)
+                                |> Seq.map snd
+                                |> Seq.fold (fun result s -> result |> Option.orElseWith (fun _ -> s typ)) None
+                | _ -> None
+                |> Option.defaultValue null
 
     let mutable isRegistered = false
+    
+    type RegistrationOption = {
+        UseOptionNull: bool
+    }
+    let defaultRegistrationOption = { UseOptionNull=true }
 
     /// Registers all F# serializers
-    let Register() =
+    let RegisterWithOptions(opt) =
         if not isRegistered then
-            BsonSerializer.RegisterSerializationProvider(FsharpSerializationProvider())
-            BsonSerializer.RegisterGenericSerializerDefinition(typeof<list<_>>, typeof<ListSerializer<_>>)
+            BsonSerializer.RegisterSerializationProvider(FsharpSerializationProvider(opt.UseOptionNull))
             isRegistered <- true
+
+type Serializers() =
+    static member Register(?opts: Serializers.RegistrationOption) =
+        Serializers.RegisterWithOptions(opts |> Option.defaultValue Serializers.defaultRegistrationOption)
