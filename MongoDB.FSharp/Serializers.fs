@@ -1,51 +1,67 @@
 ﻿namespace MongoDB.FSharp
 
 open System
-open System.Reflection
 open Microsoft.FSharp.Reflection
 open MongoDB.Bson
 open MongoDB.Bson.IO
 open MongoDB.Bson.Serialization
-open MongoDB.Bson.Serialization.Options
 open MongoDB.Bson.Serialization.Serializers
-
-open SerializationOptions
-
-module Seq =
-    let tryHead s =
-        if Seq.isEmpty s then
-            None
-        else
-            Some (s |> Seq.head)
 
 module Serializers =
 
-    type MongoDB.Bson.IO.BsonWriter with
-        member inline this.WriteEmptyArray() =
-            this.WriteStartArray()
-            this.WriteEndArray()
+    type MongoOptionSerializer<'T>() =
+        inherit SerializerBase<'T option>()
+        
+        let contentSerializer = BsonSerializer.LookupSerializer(typeof<'T>)
+        
+        override my.Serialize(context, _, value) =
+            let writer = context.Writer
+            match value with
+            | Some v -> contentSerializer.Serialize(context, v)
+            | None -> writer.WriteNull()
+            ()
 
-    type ListSerializer<'T>() =
-        inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer(ListSerializationOptions())
-
-        override this.Serialize(writer : BsonWriter, nominalType : Type, value : Object, options : IBsonSerializationOptions) =
-            if value = null then
-                // There aren't supposed to be null values in F#
-                writer.WriteEmptyArray()
-            else
-                let actualType = value.GetType()
-                this.VerifyTypes(nominalType, actualType, typeof<list<'T>>)
-
-                let lst = value :?> list<'T>
-                writer.WriteStartArray()
+        override my.Deserialize(context, _) =
+            let reader = context.Reader
+            let savePos = reader.GetBookmark()
+            let readDefined() =
+                if reader.CurrentBsonType = BsonType.Undefined
+                then None
+                else Some (contentSerializer.Deserialize(context) :?> 'T)
                 
-                lst |> List.iter (fun x -> BsonSerializer.Serialize (writer,typeof<'T>, x))
+            match reader.CurrentBsonType with
+            | BsonType.Null ->
+                reader.ReadNull()
+                None
+            | BsonType.Document ->
+                reader.ReadStartDocument()
+                if reader.FindElement("_v") then
+                    reader.ReadStartArray()
+                    let result = readDefined()
+                    if result.IsNone then reader.ReadUndefined()
+                    reader.ReadEndArray()
+                    reader.ReadEndDocument()
+                    result
+                else
+                    if reader.CurrentBsonType = BsonType.EndOfDocument
+                    then reader.ReadEndDocument()
+                    else reader.ReturnToBookmark(savePos)
+                    None
+            | _ -> readDefined()
+            
+    type ListSerializer<'T>() =
+        inherit SerializerBase<list<'T>>()
 
-                writer.WriteEndArray()
+        override this.Serialize(context, _, value) =
+            let writer = context.Writer
+            writer.WriteStartArray()
+            
+            value |> List.iter (fun x -> BsonSerializer.Serialize (writer,typeof<'T>, x))
 
-        override this.Deserialize(reader : BsonReader, nominalType : Type, actualType : Type, options : IBsonSerializationOptions) =
-            let serializationOptions = this.EnsureSerializationOptions<ListSerializationOptions>(options)
-            let itemOptions = serializationOptions.ItemSerializationOptions
+            writer.WriteEndArray()
+
+        override this.Deserialize(context, args) =
+            let reader = context.Reader
             let readArray() =
                 seq {
                     reader.ReadStartArray()
@@ -53,7 +69,7 @@ module Serializers =
                     while reader.ReadBsonType() <> BsonType.EndOfDocument do
                         let actualElementType = convention.GetActualType(reader, typeof<'T>)
                         let serializer = BsonSerializer.LookupSerializer(actualElementType)
-                        let element = serializer.Deserialize(reader, typeof<'T>, itemOptions)
+                        let element = serializer.Deserialize(context, args)
                         yield element :?> 'T
                     reader.ReadEndArray()
                 }
@@ -62,7 +78,7 @@ module Serializers =
                 reader.ReadStartDocument()
                 reader.ReadString("_t") |> ignore
                 reader.ReadName("_v")
-                let value = this.Deserialize(reader, actualType, actualType, options)
+                let value = this.Deserialize(context, args)
                 reader.ReadEndDocument()
                 value
             
@@ -70,19 +86,20 @@ module Serializers =
             match bsonType with
             | BsonType.Null ->
                 reader.ReadNull()
-                null
-            | BsonType.Array -> readArray() |> List.ofSeq :> Object
+                List.empty
+            | BsonType.Array -> readArray() |> List.ofSeq
             | BsonType.Document -> readArrayFromObject ()
             | _ -> 
-                let msg = sprintf "Can't deserialize a %s from BsonType %s" actualType.FullName (bsonType.ToString())
-                raise(InvalidOperationException(msg))
+                let msg = $"Can't deserialize a %s{args.NominalType.FullName} from BsonType %s{bsonType.ToString()}"
+                raise <| InvalidOperationException(msg)
 
         interface IBsonArraySerializer with
-            member this.GetItemSerializationInfo() : BsonSerializationInfo =
+            member this.TryGetItemSerializationInfo(serializationInfo) =
                 let elementName = null
                 let nominalType = typeof<'T>
                 let serializer = BsonSerializer.LookupSerializer nominalType
-                BsonSerializationInfo(elementName, serializer, nominalType, null)
+                serializationInfo <- BsonSerializationInfo(elementName, serializer, nominalType)
+                true
 
 
     let fsharpType (typ : Type) =
@@ -91,65 +108,13 @@ module Serializers =
         |> Seq.map(fun t -> t.SourceConstructFlags)
         |> Seq.tryHead
 
-    let getClassMap isClassMapRegistered (actualType : Type) =
-        let rec getMember (_type : Type) name other =
-            let memberInfos = _type.GetMember name
-            if not (memberInfos |> Seq.isEmpty) then
-                Some(Seq.head memberInfos)
-            elif other <> null then
-                getMember _type other null
-            else
-                None
+    let createClassMapSerializer (type': Type) (classMap: BsonClassMap) =
+        let concreteType = type'.MakeGenericType(classMap.ClassType)
+        let ctor = concreteType.GetConstructor([| typeof<BsonClassMap> |])
+        ctor.Invoke([| classMap |]) :?> IBsonSerializer
 
-        if not (isClassMapRegistered actualType) then
-            let genericType = typedefof<BsonClassMap<_>>.MakeGenericType(actualType)
-            let classMap = Activator.CreateInstance(genericType) :?> BsonClassMap
-
-            classMap.AutoMap()
-
-            // TODO: don't just map properties -> anything public, maybe consider using C#'s conventions to some extent
-            actualType.GetProperties() 
-            |> Seq.where (fun prop -> 
-                classMap.AllMemberMaps |> Seq.exists (fun mm -> mm.MemberInfo = (prop :> MemberInfo)) |> not
-            )
-            |> Seq.where (fun prop -> prop.GetGetMethod() <> null)
-            |> Seq.iter (fun prop -> classMap.MapMember(prop :> MemberInfo) |> ignore )
-
-            // TODO: use conventions
-            match getMember actualType "Id" "_id" with
-            | Some memberInfo -> classMap.MapIdMember memberInfo |> ignore
-            | None -> ()
-
-            match fsharpType actualType with 
-            | Some SourceConstructFlags.RecordType -> 
-                // Map creator function. Requires Mongo >1.8
-                match actualType.GetConstructors() |> Seq.sortBy (fun c -> c.GetParameters().Length) |> Seq.tryHead with
-                | Some c -> 
-                    let parms = classMap.DeclaredMemberMaps |> Seq.map (fun m -> m.ElementName) |> Array.ofSeq
-                    classMap.MapConstructor (c, parms) |> ignore
-                | None -> ()
-            | _ -> ()
-
-            classMap.Freeze() |> Some
-        else 
-            None
-
-    let ensureClassMapRegistered actualType =
-        let fn = BsonClassMap.IsClassMapRegistered 
-        match getClassMap fn actualType with
-        | Some map -> 
-            map |> BsonClassMap.RegisterClassMap
-            Some map
-        | None -> 
-            None
-
-    type RecordSerializer(classMap : BsonClassMap) =
-        inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer()
-
-        let classMapSerializer =
-            let typ = typeof<BsonClassMap>.Assembly.GetType("MongoDB.Bson.Serialization.BsonClassMapSerializer")
-            let ctor = typ.GetConstructor([ typeof<BsonClassMap> ] |> Seq.toArray)
-            ctor.Invoke([ classMap ] |> Seq.cast<Object> |> Seq.toArray) :?> IBsonSerializer
+    type RecordSerializerBase(classMap : BsonClassMap) =
+        let classMapSerializer = classMap |> createClassMapSerializer typedefof<BsonClassMapSerializer<_>>
 
         let getter = 
             match classMap.IdMemberMap with
@@ -158,24 +123,24 @@ module Serializers =
 
         let idProvider = classMapSerializer :?> IBsonIdProvider
 
-        override this.Serialize(writer : BsonWriter, nominalType : Type, value : Object, options : IBsonSerializationOptions) =
-            classMapSerializer.Serialize(writer, nominalType, value, options)
-
-        override this.Deserialize(reader : BsonReader, nominalType : Type, options : IBsonSerializationOptions) =
-            classMapSerializer.Deserialize(reader, nominalType, options)
-
-        override this.Deserialize(reader : BsonReader, nominalType : Type, actualType : Type, options : IBsonSerializationOptions) =
-            classMapSerializer.Deserialize(reader, nominalType, actualType, options)
+        member val _ClassMapSerializer = classMapSerializer
+        
+        interface IBsonSerializer with
+            member _.ValueType = classMap.ClassType
+            
+            member _.Serialize(context, args, value) = classMapSerializer.Serialize(context, args, value)
+            member _.Deserialize(context, args) = classMapSerializer.Deserialize(context, args)
 
 
         interface IBsonDocumentSerializer  with
-            member this.GetMemberSerializationInfo(memberName:string) = 
+            member this.TryGetMemberSerializationInfo(memberName, serializationInfo) = 
                 let m = classMap.AllMemberMaps |> Seq.tryFind (fun x -> x.MemberName = memberName)
                 match m with
-                | Some(x) -> new BsonSerializationInfo(x.ElementName, x.GetSerializer(x.MemberType), x.MemberType, x.SerializationOptions)
+                | Some(x) ->
+                    serializationInfo <- BsonSerializationInfo(x.ElementName, x.GetSerializer(), x.MemberType)
+                    true        
                 | None -> 
-                    let msg = sprintf "Class has no member called %s" memberName 
-                    raise(ArgumentOutOfRangeException(msg))       
+                    raise <| ArgumentOutOfRangeException($"Class has no member called %s{memberName}")
                 
 
         interface IBsonIdProvider with
@@ -188,76 +153,106 @@ module Serializers =
 
             member this.SetDocumentId(document : Object, id : Object) = idProvider.SetDocumentId(document, id)
 
+    type RecordSerializer<'T>(classMap : BsonClassMap) =
+        inherit RecordSerializerBase(classMap)
+        
+        do assert (typeof<'T> = classMap.ClassType)
+        
+        member private my.Serializer = my._ClassMapSerializer :?> IBsonSerializer<'T>
 
-    type UnionCaseSerializer() =
-        inherit MongoDB.Bson.Serialization.Serializers.BsonBaseSerializer()
+        interface IBsonSerializer<'T> with
+            member my.Serialize(context: BsonSerializationContext, args: BsonSerializationArgs, value: 'T) =
+                my.Serializer.Serialize(context, args, value)
+            member my.Deserialize(context, args) = my.Serializer.Deserialize(context, args)
+    
+    type UnionCaseSerializer(original) =
 
-        let readItems (reader : BsonReader) (types : Type seq) (options : IBsonSerializationOptions) =
+        let readItems context args (types : Type seq) =
             types |> Seq.fold(fun state t ->
                 let serializer = BsonSerializer.LookupSerializer(t)
-                let item = serializer.Deserialize(reader, t, options)
+                let item = serializer.Deserialize(context, args)
                 item :: state
             ) []
             |> Seq.toArray |> Array.rev
 
-        override this.Serialize(writer : BsonWriter, nominalType : Type, value : Object, options : IBsonSerializationOptions) =
-            writer.WriteStartDocument()
-            let info, values = FSharpValue.GetUnionFields(value, nominalType)
-            writer.WriteName("_t")
-            writer.WriteString(info.Name)
-            writer.WriteName("_v")
-            writer.WriteStartArray()
-            values |> Seq.zip(info.GetFields()) |> Seq.iter (fun (field, value) ->
-                let itemSerializer = BsonSerializer.LookupSerializer(field.PropertyType)
-                itemSerializer.Serialize(writer, field.PropertyType, value, options)
-            )
-            writer.WriteEndArray()
-            writer.WriteEndDocument()
-
-        override this.Deserialize(reader : BsonReader, nominalType : Type, actualType : Type, options : IBsonSerializationOptions) =
-            reader.ReadStartDocument()
-            reader.ReadName("_t")
-            let typeName = reader.ReadString()
-            let unionType = 
-                FSharpType.GetUnionCases(nominalType) 
-                |> Seq.where (fun case -> case.Name = typeName) |> Seq.head
-            reader.ReadStartArray()
-            let items = readItems reader (unionType.GetFields() |> Seq.map(fun f -> f.PropertyType)) options
-            reader.ReadEndArray()
-            reader.ReadEndDocument()
-            FSharpValue.MakeUnion(unionType, items)
-
-    type FsharpSerializationProvider() =
+        interface IBsonSerializer with
+            member _.ValueType = original
+            
+            member _.Serialize(context, args, value) =
+                let writer = context.Writer
+                writer.WriteStartDocument()
+                let info, values = FSharpValue.GetUnionFields(value, args.NominalType)
+                writer.WriteName("_t")
+                writer.WriteString(info.Name)
+                writer.WriteName("_v")
+                writer.WriteStartArray()
+                values |> Seq.zip(info.GetFields()) |> Seq.iter (fun (field, value) ->
+                    let itemSerializer = BsonSerializer.LookupSerializer(field.PropertyType)
+                    itemSerializer.Serialize(context, args, value)
+                )
+                writer.WriteEndArray()
+                writer.WriteEndDocument()
+                
+            member _.Deserialize(context, args) =
+                let reader = context.Reader
+                reader.ReadStartDocument()
+                reader.ReadName("_t")
+                let typeName = reader.ReadString()
+                let unionType = 
+                    FSharpType.GetUnionCases(args.NominalType) 
+                    |> Seq.where (fun case -> case.Name = typeName) |> Seq.head
+                reader.ReadStartArray()
+                let items = readItems context args (unionType.GetFields() |> Seq.map(fun f -> f.PropertyType))
+                reader.ReadEndArray()
+                reader.ReadEndDocument()
+                FSharpValue.MakeUnion(unionType, items)
+                
+    let private getGenericArgumentOf baseType (typ: Type) =
+        if typ.IsGenericType && typ.GetGenericTypeDefinition() = baseType
+        then Some <| typ.GetGenericArguments()
+        else None
+        
+    let inline private createInstance<'T> typ = Activator.CreateInstance(typ) :?> 'T
+    let inline private makeGenericType<'T> typ = typedefof<'T>.MakeGenericType typ
+        
+    let specificSerializer<'nominal,'serializer> =
+        getGenericArgumentOf typedefof<'nominal> >> Option.map (makeGenericType<'serializer> >> createInstance<IBsonSerializer>)
+    let listSerializer typ = typ |> specificSerializer<List<_>, ListSerializer<_>>
+    let simplisticOptionSerializer typ = typ |> specificSerializer<Option<_>, MongoOptionSerializer<_>>
+    
+    let unionCaseSerializer typ = Some (typ |> UnionCaseSerializer :> IBsonSerializer)
+    
+    type FsharpSerializationProvider(useOptionNull) =
+        let serializers =
+          seq {
+              yield SourceConstructFlags.SumType, listSerializer
+              if useOptionNull then yield SourceConstructFlags.SumType, simplisticOptionSerializer
+              yield SourceConstructFlags.SumType, unionCaseSerializer
+          } |> List.ofSeq
 
         interface IBsonSerializationProvider with
             member this.GetSerializer(typ : Type) =
-                let t = fsharpType typ
-                match t with
-                | Some SourceConstructFlags.RecordType ->
-                    match ensureClassMapRegistered typ with
-                    | Some classMap -> RecordSerializer(classMap) :> IBsonSerializer
-                    // return null means to try the next provider to see if it has a better answer
-                    | None -> null
-
-                // other F# types, when we're ready (list, seq, discriminated union)
-                | Some SourceConstructFlags.SumType ->
-                    // Maybe it's a list?
-                    if typ.IsGenericType && typ.GetGenericTypeDefinition() = typedefof<List<_>> then
-                         typedefof<ListSerializer<_>>.MakeGenericType(typ.GetGenericArguments())
-                         |> Activator.CreateInstance :?> IBsonSerializer
-                    elif FSharpType.IsUnion typ then
-                        UnionCaseSerializer() :> IBsonSerializer
-                    else
-                        null
-
-                | Some SourceConstructFlags.UnionCase -> UnionCaseSerializer() :> IBsonSerializer
-                | _ -> null
+                match fsharpType typ with
+                | Some flag ->
+                    serializers |> Seq.filter (fst >> (=) flag)
+                                |> Seq.map snd
+                                |> Seq.fold (fun result s -> result |> Option.orElseWith (fun _ -> s typ)) None
+                | _ -> None
+                |> Option.defaultValue null
 
     let mutable isRegistered = false
+    
+    type RegistrationOption = {
+        UseOptionNull: bool
+    }
+    let defaultRegistrationOption = { UseOptionNull=true }
 
     /// Registers all F# serializers
-    let Register() =
+    let RegisterWithOptions(opt) =
         if not isRegistered then
-            BsonSerializer.RegisterSerializationProvider(FsharpSerializationProvider())
-            BsonSerializer.RegisterGenericSerializerDefinition(typeof<list<_>>, typeof<ListSerializer<_>>)
+            BsonSerializer.RegisterSerializationProvider(FsharpSerializationProvider(opt.UseOptionNull))
             isRegistered <- true
+
+type Serializers() =
+    static member Register(?opts: Serializers.RegistrationOption) =
+        Serializers.RegisterWithOptions(opts |> Option.defaultValue Serializers.defaultRegistrationOption)
